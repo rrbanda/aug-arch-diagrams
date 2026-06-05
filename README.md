@@ -29,6 +29,7 @@ All diagrams use color coding:
 | 5 | `05-architecture.mermaid` | Flowchart | System architecture: all components and data flows |
 | 6 | `06-delete-flow.mermaid` | Flowchart | Delete paths: admin vs non-admin, cleanup per surface |
 | 7 | `07-security-modes.mermaid` | Flowchart | Security modes: none vs plugin-only vs full RBAC |
+| 8 | `08-sonataflow-approval.mermaid` | Sequence | SonataFlow governance: submit, approve/reject, escalation, withdraw |
 
 ## Naming
 

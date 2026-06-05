@@ -1,0 +1,86 @@
+sequenceDiagram
+    actor Developer
+    participant Orion as Orion Backend
+    participant DB as AdminConfigService
+    participant SF as SonataFlow Engine
+    participant Notify as Backstage Notifications
+    actor Admin
+
+    rect rgb(219, 234, 254)
+    Note over Developer,DB: Developer Submits Agent for Review
+    Developer->>Orion: PUT /agents/:id/promote (targetStage: pending)
+    Orion->>DB: Update lifecycleStage = pending
+    Orion->>DB: Set pendingAction = publish
+    end
+
+    rect rgb(209, 250, 229)
+    Note over Orion,SF: Start SonataFlow Workflow
+    Orion->>SF: POST /agentApproval<br/>{agentId, agentName, submittedBy}
+    SF-->>Orion: {id: workflowInstanceId}
+    Orion->>DB: Store approvalWorkflowInstanceId
+    Orion-->>Developer: {lifecycleStage: pending, workflowInstanceId}
+    end
+
+    rect rgb(254, 249, 195)
+    Note over SF,Notify: Workflow: Notify Admins
+    SF->>SF: State: NotifyReviewSubmitted
+    SF->>Notify: createNotification (broadcast)<br/>"Agent submitted for review by {submittedBy}"
+    Notify-->>Admin: Notification appears in Backstage
+    end
+
+    rect rgb(254, 249, 195)
+    Note over SF: Workflow: Wait for Decision
+    SF->>SF: State: WaitForDecision<br/>Callback state, suspended<br/>Timeout: 72 hours
+    end
+
+    alt Admin approves within 72h
+        rect rgb(209, 250, 229)
+        Note over Admin,SF: Admin Approves
+        Admin->>Orion: PUT /agents/:id/promote (targetStage: published)
+        Orion->>SF: POST CloudEvent<br/>type: io.rhdhorchestrator.agent.approval.decision<br/>{approved: true, decidedBy: admin}
+        Orion-->>Admin: {workflowDecisionSent: true}
+
+        Note over SF,Orion: Workflow: Process Approval
+        SF->>SF: State: ProcessDecision -> ApproveAgent
+        SF->>Orion: PUT /agents/:id/promote<br/>X-Augment-Workflow-Callback: true<br/>targetStage: published
+        Orion->>DB: lifecycleStage = published<br/>published = true, visible = true
+        Orion->>DB: Clear approvalWorkflowInstanceId
+        SF->>Notify: createNotification (to submitter)<br/>"Agent approved by {admin}"
+        end
+
+    else Admin rejects
+        rect rgb(254, 226, 226)
+        Note over Admin,SF: Admin Rejects
+        Admin->>Orion: PUT /agents/:id/demote (targetStage: draft, reason)
+        Orion->>SF: POST CloudEvent<br/>{approved: false, reason: "..."}
+
+        Note over SF,Orion: Workflow: Process Rejection
+        SF->>SF: State: ProcessDecision -> RejectAgent
+        SF->>Orion: PUT /agents/:id/demote<br/>X-Augment-Workflow-Callback: true<br/>targetStage: draft
+        Orion->>DB: lifecycleStage = draft<br/>rejectionReason, rejectedBy, rejectedAt
+        Orion->>DB: Clear approvalWorkflowInstanceId
+        SF->>Notify: createNotification (to submitter)<br/>"Agent rejected: {reason}"
+        end
+
+    else No decision in 72 hours
+        rect rgb(254, 249, 195)
+        Note over SF,Notify: Workflow: Escalation
+        SF->>SF: State: EscalateTimeout
+        SF->>Notify: createNotification (broadcast, severity: high)<br/>"ESCALATION: Agent pending 72+ hours"
+        SF->>SF: Return to WaitForDecision<br/>Wait another 72h cycle
+        end
+
+    else Developer withdraws
+        rect rgb(238, 242, 255)
+        Note over Developer,SF: Developer Withdraws
+        Developer->>Orion: PUT /agents/:id/withdraw
+        Orion->>DB: lifecycleStage = draft<br/>Clear pendingAction
+        Orion->>SF: DELETE /management/processes/agentApproval/instances/{id}
+        SF->>SF: Workflow cancelled
+        end
+    end
+
+    rect rgb(243, 232, 255)
+    Note over Developer,Admin: Fail-Closed Safety
+    Note over Orion: If SonataFlow fails to start:<br/>Agent reverted to draft<br/>HTTP 502 returned to user<br/><br/>If SonataFlow callback fails:<br/>Agent stays in pending<br/>Admin can retry via UI
+    end

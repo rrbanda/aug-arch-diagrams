@@ -15,7 +15,7 @@ flowchart TD
 
     subgraph PendingBox [Pending Stage]
         Pending[PENDING]:::pending
-        PendingInfo[In Review Queue<br/>Awaiting admin approval<br/>Self-approval blocked<br/>SonataFlow workflow if enabled]:::note
+        PendingInfo[In Review Queue<br/>Awaiting admin approval<br/>Self-approval blocked<br/>SonataFlow governance if enabled:<br/>- Backstage notifications sent<br/>- 72h escalation timer<br/>- CloudEvent-based decisions<br/>See diagram 08 for full flow]:::note
     end
 
     subgraph PublishedBox [Published Stage]
