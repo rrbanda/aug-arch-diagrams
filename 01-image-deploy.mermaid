@@ -1,0 +1,58 @@
+sequenceDiagram
+    actor User
+    participant UI as Orion UI
+    participant Wizard as BYO Wizard
+    participant Backend as Orion Backend
+    participant KC as Keycloak
+    participant RHAO as Red Hat Agent Operator
+    participant K8s as Kubernetes
+    participant Pod as Agent Pod
+
+    User->>UI: Click "+ New Agent"
+    UI->>UI: Open Intent Dialog
+    User->>UI: Select "BYO Agent"
+    UI->>Wizard: Open CreateAgentWizard
+
+    Note over Wizard: Step 1 - Basics
+    Wizard->>Backend: GET /kagenti/namespaces
+    Backend->>RHAO: GET /api/v1/namespaces
+    RHAO-->>Backend: [namespaces]
+    Backend-->>Wizard: Namespace dropdown populated
+    User->>Wizard: Enter name, namespace, framework
+
+    Note over Wizard: Step 2 - Deployment
+    User->>Wizard: Select "Container Image"
+    User->>Wizard: Enter image URL + pull secret
+
+    Note over Wizard: Step 3 - Runtime
+    User->>Wizard: Add env vars, ports, toggles
+    User->>Wizard: Click "Create"
+
+    Note over Wizard,Pod: Agent Creation
+    Wizard->>Backend: POST /kagenti/agents
+    Backend->>Backend: Validate namespace
+    Backend->>KC: client_credentials grant
+    KC-->>Backend: Access token (with audience scopes)
+    Backend->>RHAO: POST /api/v1/agents (Bearer token)
+    RHAO->>K8s: Create Deployment
+    RHAO->>K8s: Create Service
+    RHAO->>K8s: Create Route
+    RHAO-->>Backend: {success: true}
+    Backend->>Backend: Auto-register in chatAgents (draft)
+    Backend-->>Wizard: Agent created
+
+    Wizard->>UI: Close wizard, refresh My Agents
+    K8s->>Pod: Schedule + pull image
+    Pod->>Pod: Start agent server (port 8000)
+
+    Note over UI,Pod: Agent Ready
+    UI->>UI: Agent appears in My Agents (Draft)
+    User->>UI: Click agent > Test tab
+    UI->>Backend: POST /chat/stream (model=ns/name)
+    Backend->>KC: Get/refresh token
+    Backend->>RHAO: POST /api/v1/chat/ns/name/stream
+    RHAO->>Pod: Forward request (A2A protocol)
+    Pod-->>RHAO: SSE response
+    RHAO-->>Backend: Stream events
+    Backend-->>UI: stream.text.delta events
+    UI->>UI: Display agent response

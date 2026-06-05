@@ -1,0 +1,55 @@
+sequenceDiagram
+    actor User
+    participant Browser as Orion Frontend
+    participant Backend as Orion Backend
+    participant TM as KeycloakTokenManager
+    participant KC as Keycloak
+    participant RHAO as Red Hat Agent Operator
+    participant Pod as Agent Pod
+
+    Note over User,Browser: User initiates chat from Test tab
+    User->>Browser: Send message to agent
+    Browser->>Backend: POST /api/augment/chat/stream<br/>Cookie: backstage-auth<br/>X-Backstage-Request: augment
+
+    Note over Backend: Identity Resolution
+    Backend->>Backend: httpAuth.credentials(req)
+    Backend->>Backend: userRef = user:default/alice
+
+    Note over Backend,KC: Token Acquisition
+    Backend->>TM: getTokenForStreaming(300000ms)
+    TM->>TM: Check cached token
+
+    alt Token valid and has enough lifetime
+        TM-->>Backend: Cached token
+    else Token expired or insufficient lifetime
+        TM->>KC: POST /realms/kagenti/protocol/openid-connect/token<br/>grant_type=client_credentials<br/>client_id=kagenti-api<br/>client_secret=***
+        KC->>KC: Issue JWT with audience scopes
+        Note over KC: JWT contains:<br/>aud: [spiffe://cluster/ns/sa/agent1, ...]<br/>azp: kagenti-api<br/>roles: [admin]
+        KC-->>TM: {access_token, expires_in: 1800}
+        TM->>TM: Cache token (expires_in - 60s buffer)
+        TM-->>Backend: Fresh token
+    end
+
+    Note over Backend,Pod: Request to Agent
+    Backend->>RHAO: POST /api/v1/chat/ns/agent/stream<br/>Authorization: Bearer {JWT}<br/>X-Backstage-User: user:default/alice
+    RHAO->>RHAO: Validate JWT signature + expiry
+    RHAO->>Pod: Forward to agent (A2A protocol)
+
+    Note over Pod: Agent Auth Validation
+    Pod->>Pod: Validate JWT audience claim
+    Pod->>Pod: Check: aud contains my SPIFFE ID?
+
+    alt Audience matches
+        Pod->>Pod: Process message with LLM
+        Pod-->>RHAO: SSE: stream events
+        RHAO-->>Backend: Forward SSE stream
+        Backend-->>Browser: data: {type: stream.text.delta, delta: "..."}
+    else Audience mismatch
+        Pod-->>RHAO: 401 token validation failed
+        RHAO-->>Backend: {error: auth.unauthorized}
+        Backend-->>Browser: data: {type: stream.error, error: "Agent rejected token"}
+    end
+
+    Note over Backend: On 401 Response
+    Backend->>TM: clearCache()
+    Backend->>TM: getToken() (retry with fresh token)

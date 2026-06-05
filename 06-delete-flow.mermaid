@@ -1,0 +1,42 @@
+flowchart TD
+    Start[User clicks Delete] --> Source{Agent source?}
+
+    Source -->|BYO Agent<br/>source = kagenti| TryKagenti[Try: DELETE /kagenti/agents/ns/name<br/>via Red Hat Agent Operator]
+    Source -->|Orchestration<br/>or Workflow| GovOnly[DELETE /agents/agentId<br/>Governance-only delete]
+
+    TryKagenti --> KagentiResult{Operator responds?}
+
+    KagentiResult -->|200 Success<br/>Admin has permission| KagentiClean[Red Hat Agent Operator cleans up]
+    KagentiResult -->|403 Forbidden<br/>Non-admin user| FallbackGov[Fallback: DELETE /agents/agentId]
+
+    KagentiClean --> K8sDel[K8s Deployment deleted]
+    KagentiClean --> SvcDel[K8s Service deleted]
+    KagentiClean --> RouteDel[OpenShift Route deleted]
+    KagentiClean --> RuntimeDel[AgentRuntime deleted]
+    KagentiClean --> GovClean[chatAgents config entry removed]
+
+    K8sDel --> FullClean[Full Cleanup Complete]
+    SvcDel --> FullClean
+    RouteDel --> FullClean
+    RuntimeDel --> FullClean
+    GovClean --> FullClean
+
+    FallbackGov --> GovOnlyClean[chatAgents config entry removed]
+    FallbackGov --> K8sRemains[K8s resources REMAIN<br/>Admin must clean up separately]
+    GovOnlyClean --> PartialClean[Partial Cleanup<br/>Agent removed from catalog<br/>K8s workload still running]
+
+    GovOnly --> GovSource{Agent type?}
+    GovSource -->|Orchestration| OrchClean[Remove from agents admin config]
+    GovSource -->|Workflow Builder| WFClean[Remove workflow + versions + chatAgents]
+    GovSource -->|Skill Agent| SkillClean[Remove chatAgents + K8s via DevSpaces API]
+
+    OrchClean --> ChatAgentsDel[chatAgents entry removed]
+    WFClean --> ChatAgentsDel
+    SkillClean --> ChatAgentsDel
+    ChatAgentsDel --> Done[Delete Complete]
+
+    subgraph legend [Permission Model]
+        AdminNote[Admin: Full delete via Operator<br/>Cleans ALL resources]
+        OwnerNote[Non-admin owner: Governance only<br/>Own draft agents only]
+        NoneNote[Non-admin non-owner: Cannot delete]
+    end

@@ -1,0 +1,41 @@
+stateDiagram-v2
+    [*] --> Draft : Agent Created<br/>(auto-registered)
+
+    Draft --> Pending : Submit for Review<br/>(owner or admin)
+    Pending --> Published : Approve and Publish<br/>(admin only, not self)
+    Pending --> Draft : Reject<br/>(admin)
+    Pending --> Draft : Withdraw<br/>(owner)
+    Published --> Pending : Request Unpublish<br/>(owner or admin)
+    Published --> Archived : Archive<br/>(admin)
+    Archived --> Draft : Reactivate<br/>(admin)
+
+    state Draft {
+        [*] --> DraftState
+        DraftState : Visible to creator + admins
+        DraftState : Not in Marketplace
+        DraftState : Can be deleted by owner
+        DraftState : Can be edited
+    }
+
+    state Pending {
+        [*] --> PendingState
+        PendingState : In Review Queue
+        PendingState : Awaiting admin approval
+        PendingState : SonataFlow workflow (if enabled)
+        PendingState : Owner can withdraw
+    }
+
+    state Published {
+        [*] --> PublishedState
+        PublishedState : Visible in Marketplace
+        PublishedState : Available to all users
+        PublishedState : Can be featured (max 4)
+        PublishedState : Chat enabled
+    }
+
+    state Archived {
+        [*] --> ArchivedState
+        ArchivedState : Removed from Marketplace
+        ArchivedState : Preserved for audit
+        ArchivedState : Admin can reactivate
+    }

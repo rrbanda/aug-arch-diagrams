@@ -1,0 +1,70 @@
+flowchart TB
+    subgraph user [User]
+        Browser[Browser]
+    end
+
+    subgraph orion [Orion Platform]
+        Frontend[Orion Frontend<br/>Augment Plugin]
+        Backend[Orion Backend<br/>augment-backend plugin]
+        DB[(AdminConfigService<br/>SQLite / Postgres)]
+    end
+
+    subgraph auth [Authentication]
+        KC[Keycloak<br/>Agent Realm]
+    end
+
+    subgraph rhao [Red Hat Agent Operator]
+        API[Operator API<br/>Python FastAPI]
+        Controller[K8s Controller<br/>Webhook + Reconciler]
+        CardCache[Agent Card Cache]
+    end
+
+    subgraph builds [Build System]
+        SW[Shipwright<br/>Build Controller]
+        Tekton[Tekton Pipelines]
+        Registry[Container Registry<br/>quay.io / internal]
+    end
+
+    subgraph workloads [Agent Workloads]
+        Agent1[Agent Pod 1<br/>LangGraph / A2A]
+        Agent2[Agent Pod 2<br/>ADK / A2A]
+        Agent3[Agent Pod 3<br/>CrewAI / A2A]
+        Svc[K8s Services]
+        Route[OpenShift Routes]
+    end
+
+    subgraph llm [LLM Backend]
+        LLMStack[LlamaStack / Gemini<br/>OpenAI-compatible API]
+    end
+
+    Browser -->|HTTPS| Frontend
+    Frontend -->|REST API| Backend
+    Backend -->|client_credentials| KC
+    KC -->|JWT with SPIFFE aud| Backend
+    Backend -->|Bearer + X-Backstage-User| API
+    Backend -->|Read/Write config| DB
+
+    API -->|Create/Delete| Controller
+    Controller -->|Manage| Agent1
+    Controller -->|Manage| Agent2
+    Controller -->|Manage| Agent3
+    Controller -->|Create| Svc
+    Controller -->|Create| Route
+    Controller -->|Register audience scopes| KC
+    API -->|Fetch| CardCache
+    CardCache -->|A2A agent-card| Agent1
+
+    API -->|Trigger builds| SW
+    SW -->|Run| Tekton
+    Tekton -->|Push image| Registry
+    Registry -->|Pull image| Agent1
+
+    Agent1 -->|LLM inference| LLMStack
+    Agent2 -->|LLM inference| LLMStack
+    Agent3 -->|LLM inference| LLMStack
+
+    API -->|Chat proxy A2A| Agent1
+    API -->|Chat proxy A2A| Agent2
+    API -->|Chat proxy A2A| Agent3
+
+    Route -->|External access| Agent1
