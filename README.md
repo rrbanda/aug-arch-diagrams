@@ -31,6 +31,21 @@ All diagrams use color coding:
 | 7 | `07-security-modes.mermaid` | Flowchart | Security modes: none vs plugin-only vs full RBAC |
 | 8 | `08-sonataflow-approval.mermaid` | Sequence | SonataFlow governance: submit, approve/reject, escalation, withdraw |
 
+## Detailed Explanations
+
+Each diagram has a companion doc in `docs/` with step-by-step explanations:
+
+| Doc | Description |
+|-----|-------------|
+| `docs/01-image-deploy.md` | Every step of image-based BYO agent creation |
+| `docs/02-source-deploy.md` | Git source deploy with Shipwright build pipeline |
+| `docs/03-auth-token-flow.md` | Complete auth chain: browser to agent pod |
+| `docs/04-lifecycle-state-machine.md` | All states, transitions, and permission rules |
+| `docs/05-architecture.md` | All components, their roles, and data flows |
+| `docs/06-delete-flow.md` | What gets cleaned up from each delete surface |
+| `docs/07-security-modes.md` | none vs plugin-only vs full RBAC in detail |
+| `docs/08-sonataflow-approval.md` | SonataFlow governance: workflow states, CloudEvents, escalation |
+
 ## Naming
 
 - **Orion** = Developer Hub platform (Backstage-based)
