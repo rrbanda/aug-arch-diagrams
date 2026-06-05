@@ -1,0 +1,46 @@
+flowchart TB
+    classDef modeNone fill:#fecaca,stroke:#dc2626,color:#000
+    classDef modePlugin fill:#fef3c7,stroke:#ca8a04,color:#000
+    classDef modeFull fill:#d1fae5,stroke:#059669,color:#000
+    classDef check fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef allow fill:#d1fae5,stroke:#059669,color:#000
+    classDef deny fill:#fecaca,stroke:#dc2626,color:#000
+    classDef info fill:#f3f4f6,stroke:#6b7280,color:#000
+
+    Request[Incoming API Request]:::check --> ModeCheck{augment.security.mode?}:::check
+
+    ModeCheck -->|"mode: none"| NoneMode["MODE: NONE<br/>(Development Only)"]:::modeNone
+    ModeCheck -->|"mode: plugin-only"| PluginMode["MODE: PLUGIN-ONLY<br/>(Recommended for shared)"]:::modePlugin
+    ModeCheck -->|"mode: full"| FullMode["MODE: FULL<br/>(Production)"]:::modeFull
+
+    subgraph none [None Mode - No Security]
+        NoneMode --> NoneAccess[requirePluginAccess: SKIP<br/>All requests allowed]:::modeNone
+        NoneAccess --> NoneAdmin[checkIsAdmin: ALWAYS TRUE<br/>Everyone is admin]:::modeNone
+        NoneAdmin --> NoneIdentity["getUserRef: Falls back to<br/>user:default/guest on failure"]:::modeNone
+        NoneIdentity --> NoneWarn["WARNING:<br/>No auth enforcement<br/>No permission boundaries<br/>No audit trail of real users<br/>Use for local dev only"]:::deny
+    end
+
+    subgraph plugin [Plugin-Only Mode]
+        PluginMode --> PluginAccess["requirePluginAccess:<br/>Verify Backstage session<br/>(augment.access permission)"]:::modePlugin
+        PluginAccess -->|Valid session| PluginAdmin{Is admin?}:::check
+        PluginAccess -->|No session| PluginDeny[401 Unauthorized]:::deny
+        PluginAdmin -->|"Check adminUsers list<br/>in app-config"| AdminList["augment.security.adminUsers:<br/>- user:default/admin<br/>- user:default/alice"]:::modePlugin
+        AdminList -->|Match| PluginIsAdmin[Admin access granted<br/>All lifecycle operations]:::allow
+        AdminList -->|No match| PluginNotAdmin["Standard user access:<br/>- View published + own agents<br/>- Submit own drafts for review<br/>- Delete own drafts<br/>- Chat with published agents"]:::modePlugin
+    end
+
+    subgraph full [Full Mode - RBAC]
+        FullMode --> FullAccess["requirePluginAccess:<br/>Check augment.access<br/>via Backstage permissions API"]:::modeFull
+        FullAccess -->|Allowed| FullAdmin{Is admin?}:::check
+        FullAccess -->|Denied| FullDeny[403 Forbidden]:::deny
+        FullAdmin -->|"Check augment.admin<br/>permission via RBAC"| RBACCheck[Backstage RBAC evaluation<br/>Roles, policies, conditions]:::modeFull
+        RBACCheck -->|"augment.admin = ALLOW"| FullIsAdmin[Admin access]:::allow
+        RBACCheck -->|"augment.admin = DENY"| FullNotAdmin[Standard user access]:::modeFull
+    end
+
+    subgraph operations [What Each Role Can Do]
+        direction LR
+        AdminOps["ADMIN<br/>- Create/delete any agent<br/>- Approve/reject submissions<br/>- Publish/unpublish agents<br/>- Archive/reactivate agents<br/>- Access Command Center<br/>- Manage config/branding"]:::allow
+        UserOps["STANDARD USER<br/>- View published agents<br/>- Chat with published agents<br/>- Create BYO agents (draft)<br/>- Submit own for review<br/>- Withdraw own submissions<br/>- Delete own drafts"]:::modePlugin
+        GuestOps["UNAUTHENTICATED<br/>(mode: none only)<br/>- Full admin access<br/>- All operations<br/>- No identity tracking"]:::deny
+    end

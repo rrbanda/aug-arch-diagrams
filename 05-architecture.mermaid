@@ -1,70 +1,84 @@
 flowchart TB
-    subgraph user [User]
-        Browser[Browser]
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef secCls fill:#fecaca,stroke:#dc2626,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+
+    subgraph user [User Layer]
+        Browser[Browser]:::userCls
     end
 
     subgraph orion [Orion Platform]
-        Frontend[Orion Frontend<br/>Augment Plugin]
-        Backend[Orion Backend<br/>augment-backend plugin]
-        DB[(AdminConfigService<br/>SQLite / Postgres)]
+        Frontend[Orion Frontend<br/>Augment Plugin UI]:::orionCls
+        SecMW[Security Middleware<br/>requirePluginAccess<br/>requireAdminAccess]:::secCls
+        Backend[Orion Backend<br/>augment-backend plugin<br/>Chat Routes / Agent Routes / Kagenti Routes]:::orionCls
+        DB[(AdminConfigService<br/>chatAgents + agents +<br/>workflows + branding)]:::orionCls
     end
 
-    subgraph auth [Authentication]
-        KC[Keycloak<br/>Agent Realm]
+    subgraph auth [Authentication Layer]
+        KC[Keycloak<br/>Agent Realm<br/>kagenti-api client]:::secCls
+        SPIFFE[SPIFFE / SPIRE<br/>Workload Identity]:::secCls
     end
 
     subgraph rhao [Red Hat Agent Operator]
-        API[Operator API<br/>Python FastAPI]
-        Controller[K8s Controller<br/>Webhook + Reconciler]
-        CardCache[Agent Card Cache]
+        API[Operator API<br/>FastAPI Backend]:::rhaoCls
+        Controller[K8s Operator<br/>Webhook + AgentCard Reconciler]:::rhaoCls
+        CardCache[Agent Card Cache<br/>A2A Metadata]:::rhaoCls
     end
 
-    subgraph builds [Build System]
-        SW[Shipwright<br/>Build Controller]
-        Tekton[Tekton Pipelines]
-        Registry[Container Registry<br/>quay.io / internal]
+    subgraph builds [Build System - Shipwright]
+        SW[Shipwright<br/>Build Controller]:::buildCls
+        Tekton[Tekton Pipelines<br/>BuildRun Pods]:::buildCls
+        Registry[Container Registry]:::buildCls
     end
 
-    subgraph workloads [Agent Workloads]
-        Agent1[Agent Pod 1<br/>LangGraph / A2A]
-        Agent2[Agent Pod 2<br/>ADK / A2A]
-        Agent3[Agent Pod 3<br/>CrewAI / A2A]
-        Svc[K8s Services]
-        Route[OpenShift Routes]
+    subgraph workloads [Agent Workloads - Kubernetes]
+        Agent1[Agent Pod<br/>LangGraph / A2A]:::k8sCls
+        Agent2[Agent Pod<br/>ADK / A2A]:::k8sCls
+        Agent3[Agent Pod<br/>CrewAI / A2A]:::k8sCls
+        Svc[K8s Services]:::k8sCls
+        Route[OpenShift Routes]:::k8sCls
     end
 
-    subgraph llm [LLM Backend]
-        LLMStack[Hosted LLM / Frontier Models<br/>via OGX]
+    subgraph llm [LLM Layer]
+        LLMStack[Hosted LLM /<br/>Frontier Models<br/>via OGX]:::llmCls
     end
 
     Browser -->|HTTPS| Frontend
-    Frontend -->|REST API| Backend
+    Frontend -->|REST API| SecMW
+    SecMW -->|Authorized requests| Backend
     Backend -->|client_credentials| KC
     KC -->|JWT with SPIFFE aud| Backend
-    Backend -->|Bearer + X-Backstage-User| API
-    Backend -->|Read/Write config| DB
+    Backend -->|"Bearer + X-Backstage-User"| API
+    Backend -->|Read/Write| DB
 
-    API -->|Create/Delete| Controller
-    Controller -->|Manage| Agent1
-    Controller -->|Manage| Agent2
-    Controller -->|Manage| Agent3
-    Controller -->|Create| Svc
-    Controller -->|Create| Route
-    Controller -->|Register audience scopes| KC
-    API -->|Fetch| CardCache
-    CardCache -->|A2A agent-card| Agent1
+    API -->|CRUD agents| Agent1
+    API -->|CRUD agents| Agent2
+    API -->|CRUD agents| Agent3
+    Controller -->|Watch + reconcile| Agent1
+    Controller -->|Create sidecars + labels| Svc
+    Controller -->|Manage| Route
+    Controller -->|Auto-register audience scopes| KC
+    API -->|Fetch A2A cards| CardCache
+    CardCache -.->|HTTP .well-known/agent-card| Agent1
 
-    API -->|Trigger builds| SW
-    SW -->|Run| Tekton
+    API -->|Create Build + trigger BuildRun| SW
+    SW -->|Execute| Tekton
     Tekton -->|Push image| Registry
-    Registry -->|Pull image| Agent1
+    Registry -.->|Pull image| Agent1
 
     Agent1 -->|LLM inference| LLMStack
     Agent2 -->|LLM inference| LLMStack
     Agent3 -->|LLM inference| LLMStack
 
-    API -->|Chat proxy A2A| Agent1
-    API -->|Chat proxy A2A| Agent2
-    API -->|Chat proxy A2A| Agent3
+    API -->|"Chat proxy (A2A SSE)"| Agent1
+    API -->|"Chat proxy (A2A SSE)"| Agent2
+    API -->|"Chat proxy (A2A SSE)"| Agent3
 
-    Route -->|External access| Agent1
+    Route -.->|External access| Agent1
+
+    SPIFFE -.->|Workload identity| Agent1
+    SPIFFE -.->|mTLS| Svc

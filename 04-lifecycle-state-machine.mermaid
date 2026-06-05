@@ -1,41 +1,37 @@
-stateDiagram-v2
-    [*] --> Draft : Agent Created<br/>(auto-registered)
+flowchart TD
+    classDef draft fill:#fef3c7,stroke:#ca8a04,color:#000
+    classDef pending fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef published fill:#d1fae5,stroke:#059669,color:#000
+    classDef archived fill:#fecaca,stroke:#dc2626,color:#000
+    classDef action fill:#f3f4f6,stroke:#6b7280,color:#000
+    classDef note fill:#ede9fe,stroke:#7c3aed,color:#000
 
-    Draft --> Pending : Submit for Review<br/>(owner or admin)
-    Pending --> Published : Approve and Publish<br/>(admin only, not self)
-    Pending --> Draft : Reject<br/>(admin)
-    Pending --> Draft : Withdraw<br/>(owner)
-    Published --> Pending : Request Unpublish<br/>(owner or admin)
-    Published --> Archived : Archive<br/>(admin)
-    Archived --> Draft : Reactivate<br/>(admin)
+    Start([Agent Created<br/>BYO Wizard / Startup Reconciliation]):::action --> Draft
 
-    state Draft {
-        [*] --> DraftState
-        DraftState : Visible to creator + admins
-        DraftState : Not in Marketplace
-        DraftState : Can be deleted by owner
-        DraftState : Can be edited
-    }
+    subgraph DraftBox [Draft Stage]
+        Draft[DRAFT]:::draft
+        DraftInfo[Visible to: creator + admins<br/>Not in Marketplace<br/>Can be edited and deleted by owner]:::note
+    end
 
-    state Pending {
-        [*] --> PendingState
-        PendingState : In Review Queue
-        PendingState : Awaiting admin approval
-        PendingState : SonataFlow workflow (if enabled)
-        PendingState : Owner can withdraw
-    }
+    subgraph PendingBox [Pending Stage]
+        Pending[PENDING]:::pending
+        PendingInfo[In Review Queue<br/>Awaiting admin approval<br/>Self-approval blocked<br/>SonataFlow workflow if enabled]:::note
+    end
 
-    state Published {
-        [*] --> PublishedState
-        PublishedState : Visible in Marketplace
-        PublishedState : Available to all users
-        PublishedState : Can be featured (max 4)
-        PublishedState : Chat enabled
-    }
+    subgraph PublishedBox [Published Stage]
+        Published[PUBLISHED]:::published
+        PublishedInfo[Visible in Marketplace<br/>Available to all users for chat<br/>Can be featured - max 4<br/>Agent card displayed]:::note
+    end
 
-    state Archived {
-        [*] --> ArchivedState
-        ArchivedState : Removed from Marketplace
-        ArchivedState : Preserved for audit
-        ArchivedState : Admin can reactivate
-    }
+    subgraph ArchivedBox [Archived Stage]
+        Archived[ARCHIVED]:::archived
+        ArchivedInfo[Removed from Marketplace<br/>Preserved for audit history<br/>K8s workload may still run]:::note
+    end
+
+    Draft -->|"Submit for Review<br/>(owner or admin)"| Pending
+    Pending -->|"Approve and Publish<br/>(admin only, NOT self-submitter)"| Published
+    Pending -->|"Reject<br/>(admin, with reason)"| Draft
+    Pending -->|"Withdraw<br/>(owner cancels submission)"| Draft
+    Published -->|"Request Unpublish<br/>(owner or admin)"| Pending
+    Published -->|"Archive<br/>(admin)"| Archived
+    Archived -->|"Reactivate<br/>(admin)"| Draft

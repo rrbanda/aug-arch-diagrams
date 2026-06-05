@@ -9,24 +9,39 @@ sequenceDiagram
     participant K8s as Kubernetes
     participant Pod as Agent Pod
 
+    rect rgb(219, 234, 254)
     Note over User,Wizard: Steps 1-3: Same as Image Deploy
     User->>Wizard: Select "Source from Git"
-    User->>Wizard: Enter Git URL, branch, path
-    User->>Wizard: Enter registry URL
+    User->>Wizard: Enter Git URL, branch, path, registry URL
+    User->>Wizard: Configure env vars, ports, toggles
     User->>Wizard: Click "Start Build"
+    end
 
-    Note over Wizard,SW: Build Phase
+    rect rgb(254, 226, 226)
+    Note over Backend,KC: Authentication
     Wizard->>Backend: POST /kagenti/agents (deploymentMethod: source)
+    Backend->>Backend: Validate namespace
     Backend->>KC: client_credentials grant
-    KC-->>Backend: Access token
+    KC-->>Backend: JWT with audience scopes
+    end
+
+    rect rgb(209, 250, 229)
+    Note over RHAO,SW: Build Initiated
     Backend->>RHAO: POST /api/v1/agents
-    RHAO->>SW: Create Shipwright Build
+    RHAO->>SW: Create Shipwright Build resource
     RHAO->>SW: Trigger BuildRun
     RHAO-->>Backend: {success, buildRunName}
-    Backend-->>Wizard: Build started
+    end
 
-    Note over Wizard: Step 4 - Build & Deploy
-    Wizard->>Wizard: Show build progress timeline
+    rect rgb(219, 234, 254)
+    Note over Backend: Governance Registration
+    Backend->>Backend: chatAgents.push({agentId, stage: draft, createdBy: userRef})
+    Backend-->>Wizard: Build started response
+    end
+
+    rect rgb(254, 249, 195)
+    Note over Wizard: Step 4 - Build & Deploy Progress
+    Wizard->>Wizard: Show build timeline UI
 
     loop Poll every 4 seconds
         Wizard->>Backend: GET /kagenti/agents/ns/name/build-info
@@ -34,25 +49,32 @@ sequenceDiagram
         RHAO-->>Backend: {buildRunPhase, outputImage}
         Backend-->>Wizard: Build status update
     end
+    end
 
-    SW->>SW: Clone Git repo
-    SW->>SW: Build Dockerfile (buildah)
-    SW->>Reg: Push built image
+    rect rgb(209, 250, 229)
+    Note over SW,Reg: Shipwright Build Execution
+    SW->>SW: Clone Git repo (branch, path)
+    SW->>SW: Build Dockerfile via buildah
+    SW->>Reg: Push built image (registry URL)
     Reg-->>SW: Image stored
+    SW->>SW: BuildRun phase = Succeeded
+    end
 
-    Note over Wizard,Pod: Deploy Phase
+    rect rgb(243, 232, 255)
+    Note over Wizard,K8s: Finalize and Deploy
     Wizard->>Wizard: Build Succeeded!
     Wizard->>Backend: POST /kagenti/agents/ns/name/finalize-build
     Backend->>RHAO: POST /api/v1/agents/ns/name/finalize-shipwright-build
     RHAO->>K8s: Create Deployment (from built image)
     RHAO->>K8s: Create Service
-    RHAO->>K8s: Create Route
-    RHAO-->>Backend: {success, deployed}
+    RHAO->>K8s: Create Route/HTTPRoute
+    RHAO-->>Backend: {success: true}
     Backend-->>Wizard: Agent deployed
+    end
 
     Wizard->>Wizard: Show success banner
     User->>Wizard: Click "Done"
-    Wizard->>Wizard: Close, refresh My Agents
+    Wizard->>Wizard: Call onCreated, close wizard
 
     K8s->>Pod: Schedule + pull built image
     Pod->>Pod: Start agent server

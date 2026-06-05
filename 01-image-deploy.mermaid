@@ -8,51 +8,71 @@ sequenceDiagram
     participant K8s as Kubernetes
     participant Pod as Agent Pod
 
+    rect rgb(238, 242, 255)
+    Note over User,Wizard: BYO Agent Wizard
     User->>UI: Click "+ New Agent"
     UI->>UI: Open Intent Dialog
     User->>UI: Select "BYO Agent"
     UI->>Wizard: Open CreateAgentWizard
+    end
 
-    Note over Wizard: Step 1 - Basics
+    rect rgb(219, 234, 254)
+    Note over Wizard,Backend: Step 1 - Basics
     Wizard->>Backend: GET /kagenti/namespaces
+    Wizard->>Backend: GET /kagenti/agents/build-strategies
     Backend->>RHAO: GET /api/v1/namespaces
-    RHAO-->>Backend: [namespaces]
-    Backend-->>Wizard: Namespace dropdown populated
+    RHAO-->>Backend: [enabled namespaces]
+    Backend-->>Wizard: Populate namespace dropdown
     User->>Wizard: Enter name, namespace, framework
+    end
 
+    rect rgb(219, 234, 254)
     Note over Wizard: Step 2 - Deployment
     User->>Wizard: Select "Container Image"
     User->>Wizard: Enter image URL + pull secret
+    end
 
+    rect rgb(219, 234, 254)
     Note over Wizard: Step 3 - Runtime
-    User->>Wizard: Add env vars, ports, toggles
+    User->>Wizard: Add env vars, ports
+    User->>Wizard: Toggle HTTP route, auth bridge, SPIRE
     User->>Wizard: Click "Create"
+    end
 
-    Note over Wizard,Pod: Agent Creation
-    Wizard->>Backend: POST /kagenti/agents
-    Backend->>Backend: Validate namespace
-    Backend->>KC: client_credentials grant
-    KC-->>Backend: Access token (with audience scopes)
+    rect rgb(254, 226, 226)
+    Note over Backend,KC: Authentication
+    Backend->>Backend: Validate namespace against allow-list
+    Backend->>KC: client_credentials grant (kagenti-api client)
+    KC-->>Backend: JWT with SPIFFE audience scopes
+    end
+
+    rect rgb(209, 250, 229)
+    Note over Backend,K8s: Agent Creation
     Backend->>RHAO: POST /api/v1/agents (Bearer token)
     RHAO->>K8s: Create Deployment
     RHAO->>K8s: Create Service
-    RHAO->>K8s: Create Route
-    RHAO-->>Backend: {success: true}
-    Backend->>Backend: Auto-register in chatAgents (draft)
-    Backend-->>Wizard: Agent created
+    RHAO->>K8s: Create Route/HTTPRoute
+    RHAO-->>Backend: {success: true, name, namespace}
+    end
 
-    Wizard->>UI: Close wizard, refresh My Agents
-    K8s->>Pod: Schedule + pull image
-    Pod->>Pod: Start agent server (port 8000)
+    rect rgb(219, 234, 254)
+    Note over Backend: Governance Registration
+    Backend->>Backend: chatAgents.push({agentId, stage: draft, createdBy: userRef})
+    Backend-->>Wizard: KagentiCreateAgentResponse
+    end
 
-    Note over UI,Pod: Agent Ready
-    UI->>UI: Agent appears in My Agents (Draft)
+    Wizard->>UI: Close wizard, switch to My Agents tab
+    K8s->>Pod: Schedule pod + pull container image
+    Pod->>Pod: Start agent server on port 8000
+
+    rect rgb(243, 232, 255)
+    Note over UI,Pod: Test Chat
     User->>UI: Click agent > Test tab
     UI->>Backend: POST /chat/stream (model=ns/name)
-    Backend->>KC: Get/refresh token
     Backend->>RHAO: POST /api/v1/chat/ns/name/stream
-    RHAO->>Pod: Forward request (A2A protocol)
-    Pod-->>RHAO: SSE response
-    RHAO-->>Backend: Stream events
+    RHAO->>Pod: Forward A2A request
+    Pod-->>RHAO: SSE stream events
+    RHAO-->>Backend: Forward stream
     Backend-->>UI: stream.text.delta events
     UI->>UI: Display agent response
+    end

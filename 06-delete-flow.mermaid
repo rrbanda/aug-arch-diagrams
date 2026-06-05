@@ -1,42 +1,52 @@
 flowchart TD
-    Start[User clicks Delete] --> Source{Agent source?}
+    classDef userAction fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef decision fill:#fef3c7,stroke:#ca8a04,color:#000
+    classDef success fill:#d1fae5,stroke:#059669,color:#000
+    classDef warning fill:#fef3c7,stroke:#ca8a04,color:#000
+    classDef danger fill:#fecaca,stroke:#dc2626,color:#000
+    classDef info fill:#dbeafe,stroke:#2563eb,color:#000
 
-    Source -->|BYO Agent<br/>source = kagenti| TryKagenti[Try: DELETE /kagenti/agents/ns/name<br/>via Red Hat Agent Operator]
-    Source -->|Orchestration<br/>or Workflow| GovOnly[DELETE /agents/agentId<br/>Governance-only delete]
+    Start[User clicks Delete on agent]:::userAction
+    Start --> Confirm[Confirmation Dialog<br/>Are you sure?]:::userAction
+    Confirm -->|Cancel| Cancel[No action]:::info
+    Confirm -->|Confirm| Source{Agent source?}:::decision
 
-    TryKagenti --> KagentiResult{Operator responds?}
+    Source -->|"BYO Agent<br/>(source = kagenti)"| TryOp[Try: DELETE /kagenti/agents/ns/name<br/>via Red Hat Agent Operator]:::info
+    Source -->|"Orchestration<br/>or Workflow"| GovOnly[DELETE /agents/agentId<br/>Governance-only]:::info
 
-    KagentiResult -->|200 Success<br/>Admin has permission| KagentiClean[Red Hat Agent Operator cleans up]
-    KagentiResult -->|403 Forbidden<br/>Non-admin user| FallbackGov[Fallback: DELETE /agents/agentId]
+    TryOp --> OpResult{Operator response?}:::decision
 
-    KagentiClean --> K8sDel[K8s Deployment deleted]
-    KagentiClean --> SvcDel[K8s Service deleted]
-    KagentiClean --> RouteDel[OpenShift Route deleted]
-    KagentiClean --> RuntimeDel[AgentRuntime deleted]
-    KagentiClean --> GovClean[chatAgents config entry removed]
+    OpResult -->|"200 OK<br/>(admin)"| OpClean[Operator Full Cleanup]:::success
+    OpResult -->|"403 Forbidden<br/>(non-admin)"| Fallback[Fallback: DELETE /agents/agentId<br/>Governance-only]:::warning
 
-    K8sDel --> FullClean[Full Cleanup Complete]
-    SvcDel --> FullClean
-    RouteDel --> FullClean
-    RuntimeDel --> FullClean
-    GovClean --> FullClean
+    OpClean --> Del1[Deployment deleted]:::success
+    OpClean --> Del2[Service deleted]:::success
+    OpClean --> Del3[Route deleted]:::success
+    OpClean --> Del4[AgentRuntime deleted]:::success
+    OpClean --> Del5[chatAgents entry removed]:::success
 
-    FallbackGov --> GovOnlyClean[chatAgents config entry removed]
-    FallbackGov --> K8sRemains[K8s resources REMAIN<br/>Admin must clean up separately]
-    GovOnlyClean --> PartialClean[Partial Cleanup<br/>Agent removed from catalog<br/>K8s workload still running]
+    Del1 --> FullDone[Full Cleanup Complete<br/>All resources removed]:::success
+    Del2 --> FullDone
+    Del3 --> FullDone
+    Del4 --> FullDone
+    Del5 --> FullDone
 
-    GovOnly --> GovSource{Agent type?}
-    GovSource -->|Orchestration| OrchClean[Remove from agents admin config]
-    GovSource -->|Workflow Builder| WFClean[Remove workflow + versions + chatAgents]
-    GovSource -->|Skill Agent| SkillClean[Remove chatAgents + K8s via DevSpaces API]
+    Fallback --> FbClean[chatAgents entry removed]:::warning
+    Fallback --> FbOrphan[K8s resources REMAIN<br/>Deployment + Service + Route<br/>still running on cluster]:::danger
+    FbClean --> PartialDone[Partial Cleanup<br/>Agent removed from catalog<br/>Admin must clean K8s separately]:::warning
 
-    OrchClean --> ChatAgentsDel[chatAgents entry removed]
-    WFClean --> ChatAgentsDel
-    SkillClean --> ChatAgentsDel
-    ChatAgentsDel --> Done[Delete Complete]
+    GovOnly --> GovType{Agent type?}:::decision
+    GovType -->|Orchestration| OrchDel[Remove from admin agents config<br/>+ chatAgents entry]:::success
+    GovType -->|Workflow Builder| WfDel[Remove workflow + versions<br/>+ chatAgents entry]:::success
+    GovType -->|Skill Agent| SkillDel[Remove chatAgents +<br/>K8s via DevSpaces API]:::success
 
-    subgraph legend [Permission Model]
-        AdminNote[Admin: Full delete via Operator<br/>Cleans ALL resources]
-        OwnerNote[Non-admin owner: Governance only<br/>Own draft agents only]
-        NoneNote[Non-admin non-owner: Cannot delete]
+    OrchDel --> GovDone[Delete Complete]:::success
+    WfDel --> GovDone
+    SkillDel --> GovDone
+
+    subgraph permissions [Permission Model]
+        direction LR
+        AdminPerm[Admin<br/>Full delete via Operator<br/>Cleans ALL resources]:::success
+        OwnerPerm[Non-admin Owner<br/>Governance only<br/>Own draft agents only]:::warning
+        NoPerm[Non-admin Non-owner<br/>Cannot delete]:::danger
     end
