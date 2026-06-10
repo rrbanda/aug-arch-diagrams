@@ -1,0 +1,100 @@
+flowchart TB
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef secCls fill:#fecaca,stroke:#dc2626,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+    classDef mcpCls fill:#fce7f3,stroke:#db2777,color:#000
+
+    subgraph frontendAPI [Frontend API Layer - toolEndpoints.ts]
+        ListTools["listTools(ns?)"]:::orionCls
+        GetTool["getTool(ns, name)"]:::orionCls
+        CreateTool["createTool(body)"]:::orionCls
+        DeleteTool["deleteTool(ns, name)"]:::orionCls
+        ConnectTool["connectTool(ns, name)"]:::orionCls
+        InvokeTool["invokeTool(ns, name, toolName, args)"]:::orionCls
+        GetBuild["getToolBuildInfo(ns, name)"]:::orionCls
+        TriggerBuild["triggerToolBuild(ns, name)"]:::orionCls
+        FinalizeBuild["finalizeToolBuild(ns, name, body)"]:::orionCls
+        RouteStatus["getToolRouteStatus(ns, name)"]:::orionCls
+    end
+
+    subgraph backendRoutes [Backend Routes - kagentiToolRoutes.ts]
+        direction TB
+        GET_List["GET /kagenti/tools"]:::orionCls
+        GET_Detail["GET /kagenti/tools/:ns/:name"]:::orionCls
+        POST_Create["POST /kagenti/tools"]:::orionCls
+        DELETE_Tool["DELETE /kagenti/tools/:ns/:name<br/>requireAdminAccess"]:::secCls
+        POST_Connect["POST /kagenti/tools/:ns/:name/connect"]:::orionCls
+        POST_Invoke["POST /kagenti/tools/:ns/:name/invoke"]:::orionCls
+        GET_Build["GET /kagenti/tools/:ns/:name/build-info"]:::orionCls
+        POST_BuildRun["POST /kagenti/tools/:ns/:name/buildrun<br/>requireAdminAccess"]:::secCls
+        POST_Finalize["POST /kagenti/tools/:ns/:name/finalize-build<br/>requireAdminAccess"]:::secCls
+        GET_Route["GET /kagenti/tools/:ns/:name/route-status"]:::orionCls
+    end
+
+    subgraph lifecycle [Lifecycle Routes - toolLifecycleRoutes.ts]
+        GET_Tools_LC["GET /tools<br/>Unified list with lifecycle"]:::orionCls
+        PUT_Promote["PUT /tools/:toolId/promote"]:::orionCls
+        PUT_Demote["PUT /tools/:toolId/demote<br/>requireAdminAccess"]:::secCls
+        PUT_Publish["PUT /tools/:toolId/publish<br/>requireAdminAccess"]:::secCls
+        PUT_Unpublish["PUT /tools/:toolId/unpublish<br/>requireAdminAccess"]:::secCls
+    end
+
+    subgraph kagentiClient [KagentiApiClient]
+        KGListTools["listTools(ns)"]:::rhaoCls
+        KGGetTool["getTool(ns, name)"]:::rhaoCls
+        KGCreateTool["createTool(body)"]:::rhaoCls
+        KGDeleteTool["deleteTool(ns, name)"]:::rhaoCls
+        KGConnectTool["connectTool(ns, name)"]:::rhaoCls
+        KGInvokeTool["invokeTool(ns, name, tool, args)"]:::rhaoCls
+        KGBuildInfo["getToolBuildInfo(ns, name)"]:::rhaoCls
+        KGBuildRun["triggerToolBuildRun(ns, name)"]:::rhaoCls
+        KGFinalize["finalizeToolBuild(ns, name, body)"]:::rhaoCls
+        KGRouteStatus["getToolRouteStatus(ns, name)"]:::rhaoCls
+    end
+
+    subgraph storage [Storage Layer]
+        AdminDB[(AdminConfigService<br/>augment_admin_config<br/>chatTools key)]:::orionCls
+        KagentiK8s[(Kagenti Platform<br/>K8s CRDs + Workloads)]:::rhaoCls
+    end
+
+    %% Frontend to Backend
+    ListTools --> GET_List
+    GetTool --> GET_Detail
+    CreateTool --> POST_Create
+    DeleteTool --> DELETE_Tool
+    ConnectTool --> POST_Connect
+    InvokeTool --> POST_Invoke
+    GetBuild --> GET_Build
+    TriggerBuild --> POST_BuildRun
+    FinalizeBuild --> POST_Finalize
+    RouteStatus --> GET_Route
+
+    %% Backend to Kagenti client
+    GET_List --> KGListTools
+    GET_Detail --> KGGetTool
+    POST_Create --> KGCreateTool
+    DELETE_Tool --> KGDeleteTool
+    POST_Connect --> KGConnectTool
+    POST_Invoke --> KGInvokeTool
+    GET_Build --> KGBuildInfo
+    POST_BuildRun --> KGBuildRun
+    POST_Finalize --> KGFinalize
+    GET_Route --> KGRouteStatus
+
+    %% Client to storage
+    KGListTools --> KagentiK8s
+    KGCreateTool --> KagentiK8s
+    KGDeleteTool --> KagentiK8s
+    KGConnectTool --> KagentiK8s
+
+    %% Lifecycle to AdminDB
+    GET_Tools_LC --> AdminDB
+    GET_Tools_LC --> KGListTools
+    PUT_Promote --> AdminDB
+    PUT_Demote --> AdminDB
+    PUT_Publish --> AdminDB
+    PUT_Unpublish --> AdminDB

@@ -1,0 +1,86 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant UI as CreateToolWizard<br/>useToolWizardForm
+    participant API as AugmentApi<br/>toolEndpoints.ts
+    participant BE as augment-backend<br/>kagentiToolRoutes
+    participant KG as Kagenti Operator<br/>API
+    participant K8s as Kubernetes
+    participant SW as Shipwright<br/>Build System
+
+    rect rgb(224, 231, 255)
+        Note over User,UI: Step 1 - Basics
+        User->>UI: Enter name, namespace, protocol, framework
+        UI->>UI: DNS-1123 validation
+        UI->>UI: Check name warning (e.g. -mcp suffix)
+        User->>UI: Click Next
+    end
+
+    rect rgb(219, 234, 254)
+        Note over User,UI: Step 2 - Deployment
+        alt Image Deploy
+            User->>UI: Select "Container Image"
+            User->>UI: Enter image URL, pull secret
+        else Source Deploy
+            User->>UI: Select "Git Source"
+            User->>UI: Enter git URL, revision, context dir
+            User->>UI: Configure registry, build strategy, Dockerfile
+        end
+        User->>UI: Click Next
+    end
+
+    rect rgb(237, 233, 254)
+        Note over User,UI: Step 3 - Runtime
+        User->>UI: Select workload type (Deployment/StatefulSet)
+        User->>UI: Configure env vars, service ports
+        User->>UI: Toggle HTTP route, auth bridge, SPIRE
+        User->>UI: Click Create / Build
+    end
+
+    rect rgb(209, 250, 229)
+        Note over UI,K8s: Submit - Image Deploy Path
+        UI->>UI: buildToolRequest(formState)
+        UI->>API: createKagentiTool(body)
+        API->>BE: POST /kagenti/tools
+        BE->>BE: Validate name + namespace
+        BE->>KG: POST /api/v1/tools
+        KG->>K8s: Create Tool CRD
+        K8s->>K8s: Deployment + Service + Route
+        KG-->>BE: { success, name, namespace }
+        BE-->>API: 200 OK
+        API-->>UI: Success
+        UI->>User: Show success snackbar
+    end
+
+    rect rgb(207, 250, 254)
+        Note over UI,SW: Submit - Source Deploy Path
+        UI->>API: createKagentiTool(body)
+        API->>BE: POST /kagenti/tools
+        BE->>KG: POST /api/v1/tools
+        KG->>K8s: Create Build CRD
+        KG-->>BE: { success }
+        BE-->>UI: Success
+
+        Note over UI,SW: Step 4 - Build Polling
+        loop Every 5 seconds
+            UI->>API: getToolBuildInfo(ns, name)
+            API->>BE: GET /kagenti/tools/:ns/:name/build-info
+            BE->>KG: GET /api/v1/tools/:ns/:name/build-info
+            KG->>SW: Check BuildRun status
+            SW-->>KG: { phase, startTime, completionTime }
+            KG-->>BE: Build status
+            BE-->>UI: Build status
+        end
+
+        SW->>SW: Clone + Build + Push image
+        UI->>UI: Build completes
+
+        UI->>API: finalizeToolBuild(ns, name, body)
+        API->>BE: POST /kagenti/tools/:ns/:name/finalize-build
+        BE->>KG: POST /api/v1/tools/:ns/:name/finalize-build
+        KG->>K8s: Create Deployment from built image
+        K8s->>K8s: Deployment + Service + Route
+        KG-->>BE: { success }
+        BE-->>UI: Success
+        UI->>User: Show success + close wizard
+    end

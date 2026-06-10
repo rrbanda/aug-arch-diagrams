@@ -1,0 +1,72 @@
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant Panel as KagentiToolsPanel
+    participant ConnDlg as ToolConnectDialog
+    participant Catalog as McpToolCatalog
+    participant InvDlg as ToolInvokeDialog<br/>SchemaInvokeForm
+    participant API as AugmentApi<br/>toolEndpoints
+    participant BE as augment-backend<br/>kagentiToolRoutes
+    participant KG as Kagenti Operator API
+    participant Tool as MCP Tool Server<br/>K8s Pod
+
+    rect rgb(224, 231, 255)
+        Note over Admin,Panel: Tool List View
+        Admin->>Panel: Open Tools panel
+        Panel->>API: listTools(namespace?)
+        API->>BE: GET /kagenti/tools
+        BE->>KG: GET /api/v1/tools (per visible namespace)
+        KG-->>BE: { items: KagentiToolSummary[] }
+        BE-->>Panel: Tools table rendered
+    end
+
+    rect rgb(209, 250, 229)
+        Note over Admin,Tool: Discovery Flow - Connect to MCP Server
+        Admin->>Panel: Click Connect icon on a tool
+        Panel->>ConnDlg: Open ToolConnectDialog(tool)
+        ConnDlg->>API: connectKagentiTool(ns, name)
+        API->>BE: POST /kagenti/tools/:ns/:name/connect
+        BE->>KG: POST /api/v1/tools/:ns/:name/connect
+        KG->>Tool: MCP protocol - list tools
+        Tool-->>KG: { tools: KagentiMcpToolSchema[] }
+        KG-->>BE: Tool schemas
+        BE-->>ConnDlg: schemas with name, description, input_schema
+
+        ConnDlg->>Catalog: Render McpToolCatalog(tools)
+        Note over Catalog: Shows each MCP tool with:<br/>- Name and description<br/>- Input schema properties<br/>- Required fields<br/>- Invoke button
+    end
+
+    rect rgb(237, 233, 254)
+        Note over Admin,Tool: Invocation Flow - Test a Tool
+        alt From McpToolCatalog (schema known)
+            Admin->>Catalog: Click Invoke on a discovered tool
+            Catalog->>InvDlg: openInvokePrefilled(tool, toolName, inputSchema)
+            Note over InvDlg: SchemaInvokeForm renders<br/>form fields from JSON schema
+            Admin->>InvDlg: Fill in arguments via form
+        else Direct invoke (no schema)
+            Admin->>Panel: Click Play icon on a tool
+            Panel->>InvDlg: openInvoke(tool)
+            Admin->>InvDlg: Enter tool_name + JSON arguments manually
+        end
+
+        InvDlg->>API: invokeKagentiTool(ns, name, toolName, args)
+        API->>BE: POST /kagenti/tools/:ns/:name/invoke
+        Note over BE: Body: { tool_name, arguments }
+        BE->>KG: POST /api/v1/tools/:ns/:name/invoke
+        KG->>Tool: MCP protocol - call tool
+        Tool->>Tool: Execute tool logic
+        Tool-->>KG: Tool result
+        KG-->>BE: { result: ... }
+        BE-->>InvDlg: Display result JSON
+        Admin->>InvDlg: View result or close
+    end
+
+    rect rgb(254, 243, 199)
+        Note over Admin,Panel: Detail Drawer
+        Admin->>Panel: Click tool row
+        Panel->>Panel: Open KagentiToolDetailDrawer
+        Panel->>API: getTool(ns, name)
+        Panel->>API: getToolRouteStatus(ns, name)
+        Panel->>API: getToolBuildInfo(ns, name)
+        Note over Panel: Shows: metadata, spec, status,<br/>route info, build history,<br/>MCP tool discovery section
+    end

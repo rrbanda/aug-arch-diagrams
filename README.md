@@ -46,6 +46,30 @@ Each diagram has a companion doc in `docs/` with step-by-step explanations:
 | `docs/07-security-modes.md` | none vs plugin-only vs full RBAC in detail |
 | `docs/08-sonataflow-approval.md` | SonataFlow governance: workflow states, CloudEvents, escalation |
 
+## MCP Tool Diagrams
+
+Diagrams 09–15 cover the MCP (Model Context Protocol) tool management flows.
+
+| # | File | Type | Description |
+|---|------|------|-------------|
+| 9 | `09-mcp-architecture-overview.mermaid` | Flowchart | MCP system architecture: Kagenti tools, MCP integrations, global MCP servers |
+| 10 | `10-tool-creation-user-journey.mermaid` | Flowchart | User journey: all three tool creation paths (Deploy, Template, DevSpace) |
+| 11 | `11-tool-deploy-wizard-sequence.mermaid` | Sequence | CreateToolWizard: image deploy vs source deploy with build polling |
+| 12 | `12-mcp-integrations-registration.mermaid` | Sequence | Code-level MCP action registration and exposure via mcp-actions-backend |
+| 13 | `13-tool-discovery-invocation.mermaid` | Sequence | Tool discovery (MCP connect) and invocation (test) flows |
+| 14 | `14-mcp-backend-api.mermaid` | Flowchart | Backend REST API: all tool CRUD routes and data flow layers |
+| 15 | `15-mcp-server-management.mermaid` | Sequence | Global MCP server config: add, test, save, and runtime resolution |
+
+| Doc | Description |
+|-----|-------------|
+| `docs/09-mcp-architecture-overview.md` | All MCP components, their roles, and the three MCP systems |
+| `docs/10-tool-creation-user-journey.md` | Every path for creating a new MCP tool |
+| `docs/11-tool-deploy-wizard-sequence.md` | CreateToolWizard steps, API request body, image vs source flows |
+| `docs/12-mcp-integrations-registration.md` | Code-level action registration, registered tools, adding new tools |
+| `docs/13-tool-discovery-invocation.md` | Connect to discover tools, invoke for testing, detail drawer |
+| `docs/14-mcp-backend-api.md` | Complete REST API surface with auth requirements |
+| `docs/15-mcp-server-management.md` | MCP server config lifecycle: YAML, DB, merge, health, runtime |
+
 ## Naming
 
 - **Orion** = Developer Hub platform (Backstage-based)

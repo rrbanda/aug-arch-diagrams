@@ -1,0 +1,116 @@
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant MSS as McpServersSection<br/>useMcpServers hook
+    participant Dialog as McpServerFormDialog<br/>AllowedToolsSelector
+    participant API as AugmentApi<br/>adminEndpoints
+    participant BE as augment-backend
+    participant MTS as McpTestService<br/>mcpClient.ts
+    participant ACS as AdminConfigService<br/>augment_admin_config DB
+    participant RCR as RuntimeConfigResolver<br/>mergeMcpServers
+    participant SS as StatusService<br/>checkMcpServerHealth
+    participant ExtMCP as External MCP Server
+
+    rect rgb(254, 243, 199)
+        Note over Admin,ACS: Phase 1 - Load Configuration
+        MSS->>API: useAdminConfig('mcpServers')
+        API->>BE: GET /admin/config/mcpServers
+        BE->>ACS: get('mcpServers')
+        ACS-->>BE: DB overrides (or null)
+        BE-->>MSS: Admin-added servers
+
+        MSS->>API: useAdminConfig('disabledMcpServerIds')
+        API->>BE: GET /admin/config/disabledMcpServerIds
+        BE->>ACS: get('disabledMcpServerIds')
+        ACS-->>MSS: Disabled YAML server IDs
+
+        MSS->>API: useStatus()
+        API->>BE: GET /status
+        BE->>RCR: mergeMcpServers()
+        Note over RCR: YAML baseline +<br/>DB overrides +<br/>filter disabled IDs
+        RCR->>SS: checkMcpServerHealth(effectiveServers)
+        loop For each effective MCP server
+            SS->>ExtMCP: MCP SDK connect + listTools
+            ExtMCP-->>SS: Tool schemas or error
+        end
+        SS-->>BE: MCPServerStatus[]
+        BE-->>MSS: { mcpServers: [{connected, toolCount, tools, source}] }
+    end
+
+    rect rgb(209, 250, 229)
+        Note over Admin,ExtMCP: Phase 2 - Add New MCP Server
+        Admin->>MSS: Click "Add Server"
+        MSS->>Dialog: Open McpServerFormDialog
+
+        Admin->>Dialog: Enter server details
+        Note over Dialog: Fields:<br/>- ID (auto or manual)<br/>- Name<br/>- Type (streamable-http / sse)<br/>- URL<br/>- Bearer token (optional)<br/>- Require approval toggle
+
+        Admin->>Dialog: Click "Test Connection"
+        Dialog->>API: testMcpConnection(url, type, headers)
+        API->>BE: POST /admin/mcp/test-connection
+        BE->>MTS: testConnection(url, type, headers)
+        MTS->>MTS: SSRF check (isPrivateUrlWithDns)
+        MTS->>ExtMCP: MCP SDK StreamableHTTPClientTransport
+        ExtMCP-->>MTS: Connection + tool list
+        MTS-->>BE: { success, tools: string[] }
+        BE-->>Dialog: Test result
+
+        alt Test successful
+            Dialog->>Dialog: Show AllowedToolsSelector
+            Note over Dialog: Checkboxes for discovered tools<br/>Default: all selected<br/>Deselect to restrict
+            Admin->>Dialog: Select allowed tools
+            Admin->>Dialog: Click "Add"
+            Dialog-->>MSS: New server added to local state
+        else Test failed
+            Dialog->>Dialog: Show error message
+        end
+    end
+
+    rect rgb(224, 231, 255)
+        Note over Admin,ACS: Phase 3 - Save Configuration
+        Admin->>MSS: Click "Save"
+        MSS->>API: save(adminServers)
+        API->>BE: PUT /admin/config/mcpServers
+        BE->>ACS: set('mcpServers', servers)
+        ACS->>ACS: Upsert to augment_admin_config
+
+        MSS->>API: save(disabledIds)
+        API->>BE: PUT /admin/config/disabledMcpServerIds
+        BE->>ACS: set('disabledMcpServerIds', ids)
+        ACS-->>MSS: Saved
+
+        Note over MSS: Next status poll picks up<br/>new effective configuration
+    end
+
+    rect rgb(237, 233, 254)
+        Note over Admin,MSS: Phase 4 - Manage Existing Servers
+        alt Edit server
+            Admin->>MSS: Click edit on McpServerCard
+            MSS->>Dialog: Pre-fill form with existing config
+            Admin->>Dialog: Modify + re-test + save
+        else Disable YAML server
+            Admin->>MSS: Toggle off a YAML-sourced server
+            MSS->>MSS: Add ID to disabledMcpServerIds
+        else Remove admin server
+            Admin->>MSS: Click delete on admin-added server
+            MSS->>MSS: Remove from local adminServers
+        else Reset all overrides
+            Admin->>MSS: Click "Reset"
+            MSS->>API: delete('mcpServers')
+            MSS->>API: delete('disabledMcpServerIds')
+            Note over MSS: Reverts to YAML-only configuration
+        end
+    end
+
+    rect rgb(254, 226, 226)
+        Note over RCR,ExtMCP: Runtime - Chat Tool Resolution
+        Note over RCR: On each chat request:<br/>RuntimeConfigResolver.mergeMcpServers()
+        RCR->>RCR: YAML + DB overrides - disabled
+        alt Direct mode (default)
+            RCR->>RCR: Pass MCP server configs to Llama Stack
+            Note over ExtMCP: Llama Stack connects directly<br/>to MCP servers
+        else Backend mode
+            RCR->>RCR: BackendToolExecutor connects via MCP SDK
+            RCR->>ExtMCP: Connect + discover + execute tool calls
+        end
+    end

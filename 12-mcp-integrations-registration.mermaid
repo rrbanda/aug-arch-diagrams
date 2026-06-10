@@ -1,0 +1,58 @@
+sequenceDiagram
+    autonumber
+    participant BS as Backstage Backend<br/>packages/backend
+    participant Plugin as MCP Extras Plugin<br/>plugin.ts
+    participant Agg as Aggregator<br/>actions/index.ts
+    participant Creator as Action Creator<br/>createXxxAction.ts
+    participant Registry as ActionsRegistryService<br/>In-memory store
+    participant MCPBe as mcp-actions-backend<br/>HTTP server
+    participant Config as app-config.yaml<br/>pluginSources
+    participant Client as MCP Client<br/>Cursor / Claude
+
+    rect rgb(224, 231, 255)
+        Note over BS,Plugin: Phase 1 - Backend Startup
+        BS->>BS: createBackend()
+        BS->>MCPBe: backend.add(mcp-actions-backend)
+        Note over MCPBe: Provides ActionsRegistryService<br/>and HTTP endpoint
+        BS->>Plugin: backend.add(software-catalog-mcp-extras)
+        BS->>Plugin: backend.add(techdocs-mcp-extras)
+        BS->>Plugin: backend.add(scaffolder-mcp-extras)
+    end
+
+    rect rgb(209, 250, 229)
+        Note over Plugin,Registry: Phase 2 - Plugin Init + Registration
+        Plugin->>Plugin: createBackendPlugin({ pluginId })
+        Plugin->>Plugin: registerInit({ deps: actionsRegistry, catalog, logger... })
+        Plugin->>Plugin: Resolve DI deps from Backstage services
+        Plugin->>Agg: init() calls createXxxActions(options)
+
+        loop For each action in the plugin
+            Agg->>Creator: createAction1(options)
+            Creator->>Registry: actionsRegistry.register({<br/>name, title, description,<br/>schema: { input, output },<br/>attributes, action<br/>})
+
+            Agg->>Creator: createAction2(options)
+            Creator->>Registry: actionsRegistry.register({...})
+        end
+    end
+
+    rect rgb(254, 243, 199)
+        Note over MCPBe,Config: Phase 3 - Tool Exposure
+        MCPBe->>Config: Read backend.actions.pluginSources
+        Config-->>MCPBe: [software-catalog-mcp-extras,<br/>techdocs-mcp-extras,<br/>scaffolder-mcp-extras,<br/>catalog, scaffolder]
+        MCPBe->>Registry: Filter actions by pluginId
+        MCPBe->>MCPBe: Namespace tool names:<br/>pluginId.action-name
+        MCPBe->>MCPBe: Start HTTP server at<br/>/api/mcp-actions/v1
+    end
+
+    rect rgb(219, 234, 254)
+        Note over Client,MCPBe: Phase 4 - Client Invocation
+        Client->>MCPBe: Connect (Streamable HTTP)
+        Note over Client,MCPBe: Authorization: Bearer MCP_TOKEN
+        MCPBe-->>Client: List available tools
+        Client->>MCPBe: Call tool (name + input)
+        MCPBe->>MCPBe: Validate input via Zod schema
+        MCPBe->>Registry: Execute action({ input, credentials, logger })
+        Registry->>Registry: Action calls Backstage services<br/>(Catalog, Scaffolder, TechDocs)
+        Registry-->>MCPBe: { output: {...} }
+        MCPBe-->>Client: MCP response<br/>(content[] + structuredContent)
+    end

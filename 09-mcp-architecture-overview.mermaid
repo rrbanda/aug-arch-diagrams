@@ -1,0 +1,96 @@
+flowchart TB
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef secCls fill:#fecaca,stroke:#dc2626,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+    classDef mcpCls fill:#fce7f3,stroke:#db2777,color:#000
+
+    subgraph user [User / Client Layer]
+        Admin[Admin User<br/>Browser]:::userCls
+        AIClient[AI Client<br/>Cursor / Claude / Llama Stack]:::userCls
+    end
+
+    subgraph orion [Orion Platform - Augment Plugin]
+        direction TB
+        subgraph frontend [Frontend]
+            KTP[KagentiToolsPanel<br/>Tool CRUD + Discovery]:::orionCls
+            TCID[ToolCreateIntentDialog<br/>Develop vs Deploy]:::orionCls
+            CTW[CreateToolWizard<br/>Basics / Deployment / Runtime]:::orionCls
+            MSS[McpServersSection<br/>Global MCP Server Config]:::orionCls
+        end
+        subgraph backend [Backend]
+            KTR[kagentiToolRoutes<br/>CRUD + Connect + Invoke]:::orionCls
+            TLR[toolLifecycleRoutes<br/>Promote / Demote / Publish]:::orionCls
+            ACS[AdminConfigService<br/>mcpServers + chatTools]:::orionCls
+            MTS[McpTestService<br/>Connection Testing]:::orionCls
+        end
+    end
+
+    subgraph mcpInteg [MCP Integrations Workspace]
+        direction TB
+        CatPlugin[software-catalog-mcp-extras<br/>1 tool: query-catalog-entities]:::mcpCls
+        ScaffPlugin[scaffolder-mcp-extras<br/>6 tools: templates, tasks, actions]:::mcpCls
+        TDPlugin[techdocs-mcp-extras<br/>3 tools: docs, coverage, content]:::mcpCls
+        ActionsReg[ActionsRegistryService<br/>In-memory action store]:::mcpCls
+        MCPBackend["mcp-actions-backend<br/>/api/mcp-actions/v1"]:::mcpCls
+    end
+
+    subgraph kagenti [Red Hat Agent Operator]
+        KagentiAPI[Operator API<br/>Tool CRUD + MCP proxy]:::rhaoCls
+        Controller[K8s Controller<br/>Tool CRD Reconciler]:::rhaoCls
+    end
+
+    subgraph workloads [MCP Tool Workloads - Kubernetes]
+        ToolPod1[MCP Tool Pod<br/>Python / Node.js]:::k8sCls
+        ToolPod2[MCP Tool Pod<br/>Custom Framework]:::k8sCls
+        ToolSvc[K8s Services<br/>ClusterIP + Route]:::k8sCls
+    end
+
+    subgraph externalMcp [External MCP Servers]
+        ExtMCP1[External MCP Server<br/>Streamable HTTP]:::llmCls
+        ExtMCP2[External MCP Server<br/>SSE]:::llmCls
+    end
+
+    subgraph backstage [Backstage Core Services]
+        Catalog[Software Catalog]:::orionCls
+        Scaffolder[Scaffolder Backend]:::orionCls
+        TechDocs[TechDocs Backend]:::orionCls
+    end
+
+    %% Augment UI flows
+    Admin -->|Browser| KTP
+    KTP --> TCID
+    TCID -->|Deploy| CTW
+    CTW -->|"POST /kagenti/tools"| KTR
+    KTR -->|"api.createTool()"| KagentiAPI
+    KagentiAPI -->|CRD| Controller
+    Controller --> ToolPod1
+    Controller --> ToolPod2
+    Controller --> ToolSvc
+
+    %% MCP tool connect/invoke
+    KTP -->|"Connect + Invoke"| KTR
+    KTR -->|"MCP protocol proxy"| KagentiAPI
+    KagentiAPI -->|"MCP connect/invoke"| ToolPod1
+
+    %% Global MCP server management
+    Admin -->|Browser| MSS
+    MSS -->|"Save mcpServers"| ACS
+    MSS -->|"Test Connection"| MTS
+    MTS -->|"MCP SDK connect"| ExtMCP1
+    MTS -->|"MCP SDK connect"| ExtMCP2
+
+    %% MCP Integrations path
+    AIClient -->|"Bearer MCP_TOKEN"| MCPBackend
+    CatPlugin -->|"register()"| ActionsReg
+    ScaffPlugin -->|"register()"| ActionsReg
+    TDPlugin -->|"register()"| ActionsReg
+    ActionsReg --> MCPBackend
+
+    %% Backstage service calls
+    CatPlugin -->|"getEntities()"| Catalog
+    ScaffPlugin -->|"scaffold(), dryRun()"| Scaffolder
+    TDPlugin -->|"static content"| TechDocs

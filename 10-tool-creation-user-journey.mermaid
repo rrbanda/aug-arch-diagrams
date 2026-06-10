@@ -1,0 +1,100 @@
+flowchart TD
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+
+    Start([User clicks New Tool]):::userCls
+
+    subgraph intent [ToolCreateIntentDialog]
+        IntentView{Choose Path}:::orionCls
+        DevelopCard[Develop<br/>Start building your MCP tool]:::orionCls
+        DeployCard[Deploy<br/>Deploy from image or Git source]:::orionCls
+    end
+
+    subgraph develop [Develop Sub-menu]
+        DevChoice{Choose Dev Path}:::orionCls
+        TemplateCard[From Template<br/>Scaffold from software template]:::orionCls
+        DevSpaceCard[Tool DevSpace<br/>Cloud IDE workspace]:::orionCls
+    end
+
+    subgraph templatePath [Template Path]
+        TemplateBrowser[AgentTemplateBrowser<br/>specType = tool]:::orionCls
+        CatalogTemplates[(Backstage Catalog<br/>kind: Template<br/>spec.type: tool)]:::orionCls
+        ScaffolderRun[Scaffolder Executes<br/>Template Steps]:::buildCls
+        GitRepo[New Git Repository<br/>MCP tool project scaffold]:::rhaoCls
+    end
+
+    subgraph devspacePath [DevSpace Path]
+        DSForm[DevSpacesLaunchForm<br/>resourceKind = tool]:::orionCls
+        DSGitUrl[Git Repository URL<br/>Optional: from template]:::orionCls
+        DSLaunch[Launch Cloud IDE<br/>DevSpaces / CDE]:::buildCls
+        DSWorkspace[Cloud IDE Workspace<br/>Full tooling + runtime]:::rhaoCls
+    end
+
+    subgraph deployPath [Deploy Path - CreateToolWizard]
+        WizardStep0[Step 1: Basics<br/>Name / Namespace / Protocol / Framework]:::orionCls
+        WizardStep1{Deployment Method?}:::orionCls
+        ImagePath[Container Image<br/>Image URL + Pull Secret]:::orionCls
+        SourcePath[Git Source<br/>Repo URL + Revision + Build Config]:::orionCls
+        WizardStep2[Step 3: Runtime<br/>Workload / Env / Ports / Routes / Auth]:::orionCls
+        Submit[Submit: POST /kagenti/tools]:::orionCls
+    end
+
+    subgraph imageDeploy [Image Deploy Result]
+        ImageSuccess[Tool Created<br/>K8s Deployment + Service]:::rhaoCls
+    end
+
+    subgraph sourceDeploy [Source Deploy Result]
+        BuildStep[Step 4: Build and Deploy<br/>Shipwright BuildRun polling]:::buildCls
+        BuildRunning[Building...<br/>Tekton pipeline runs]:::buildCls
+        BuildDone[Build Complete<br/>Image pushed to registry]:::buildCls
+        Finalize[Finalize: POST .../finalize-build<br/>Create Deployment from built image]:::orionCls
+        SourceSuccess[Tool Deployed<br/>K8s Deployment + Service]:::rhaoCls
+    end
+
+    subgraph result [Final State]
+        ToolReady[MCP Tool Server Running<br/>Ready for Connect + Invoke]:::rhaoCls
+    end
+
+    Start --> IntentView
+    IntentView -->|Develop| DevelopCard
+    IntentView -->|Deploy| DeployCard
+
+    DevelopCard --> DevChoice
+    DevChoice -->|From Template| TemplateCard
+    DevChoice -->|Tool DevSpace| DevSpaceCard
+
+    TemplateCard --> TemplateBrowser
+    TemplateBrowser -->|"Discover templates"| CatalogTemplates
+    TemplateBrowser -->|"Select + Run"| ScaffolderRun
+    ScaffolderRun --> GitRepo
+    TemplateBrowser -->|"Open in DevSpace"| DSGitUrl
+    GitRepo -.->|"Later: Deploy via wizard"| DeployCard
+
+    DevSpaceCard --> DSForm
+    DSForm --> DSGitUrl
+    DSGitUrl --> DSLaunch
+    DSLaunch --> DSWorkspace
+    DSWorkspace -.->|"Later: Deploy via wizard"| DeployCard
+
+    DeployCard --> WizardStep0
+    WizardStep0 --> WizardStep1
+    WizardStep1 -->|Image| ImagePath
+    WizardStep1 -->|Source| SourcePath
+    ImagePath --> WizardStep2
+    SourcePath --> WizardStep2
+    WizardStep2 --> Submit
+
+    Submit -->|"deploymentMethod = image"| ImageSuccess
+    Submit -->|"deploymentMethod = source"| BuildStep
+
+    ImageSuccess --> ToolReady
+
+    BuildStep --> BuildRunning
+    BuildRunning --> BuildDone
+    BuildDone --> Finalize
+    Finalize --> SourceSuccess
+    SourceSuccess --> ToolReady
