@@ -1,0 +1,103 @@
+flowchart TD
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef secCls fill:#fecaca,stroke:#dc2626,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+    classDef mcpCls fill:#fce7f3,stroke:#db2777,color:#000
+
+    Start([User clicks New Agent]):::userCls
+
+    subgraph intent [AgentCreateIntentDialog]
+        TopLevel{Choose Path}:::orionCls
+        CreateCard["Create Agent<br/>Build from scratch"]:::orionCls
+        BYOCard["BYO Agent<br/>Import existing<br/>(EXCLUDED)"]:::secCls
+    end
+
+    subgraph createSub [Create Agent Sub-menu]
+        SkillsCard["Create using Skills<br/>Compose from reusable skills"]:::rhaoCls
+        CanvasCard["Create with Visual Canvas<br/>No-code workflow builder"]:::orionCls
+        CodeCard["Code Your Agent<br/>Cloud IDE workspace"]:::buildCls
+        TemplateCard["Create from Template<br/>Software template scaffold"]:::llmCls
+    end
+
+    subgraph skillsPath [Method 1 - Skills Agent]
+        RuntimePick[RuntimePicker<br/>DocsClaw / ZeroClaw]:::rhaoCls
+        SkillBrowse[SkillBrowser<br/>Select skills by domain]:::rhaoCls
+        SkillConfig[SkillAgentConfigForm<br/>Name + system prompt]:::rhaoCls
+        SkillDeploy["POST /agents/from-skills<br/>K8s manifests + deploy"]:::rhaoCls
+        SkillAgent["Skill Agent Pod<br/>framework: docsclaw"]:::k8sCls
+    end
+
+    subgraph canvasPath [Method 2 - Visual Canvas]
+        WFDashboard[WorkflowDashboard<br/>Templates + existing workflows]:::orionCls
+        WFEditor[WorkflowEditor<br/>Drag-and-drop canvas]:::orionCls
+        WFPublish["PublishDialog<br/>POST .../workflows/:id/publish"]:::orionCls
+        WFAgent["Workflow Agent<br/>framework: workflow-builder"]:::orionCls
+    end
+
+    subgraph codePath [Method 3 - Code Your Agent]
+        FrameworkPick[DevSpacesFrameworkPicker<br/>ADK / LangGraph / CrewAI / OpenAI / Custom]:::buildCls
+        DSLaunch[DevSpacesLaunchForm<br/>Git repo + cloud IDE]:::buildCls
+        CloudIDE["Cloud IDE Workspace<br/>Development only"]:::buildCls
+    end
+
+    subgraph templatePath [Method 4 - From Template]
+        TemplateBrowser[AgentTemplateBrowser<br/>specType = agent]:::llmCls
+        Scaffolder["Backstage Scaffolder<br/>New Git repository"]:::llmCls
+    end
+
+    subgraph configPath [Method 5 - Config-Driven]
+        AgentsPanel[AgentsPanel<br/>Admin panel]:::orionCls
+        CreateModal[CreateAgentModal<br/>Blank / Code Assistant / Research / Knowledge]:::orionCls
+        AgentEditor["Multi-tab editor<br/>Instructions / Capabilities / Connections / Advanced"]:::orionCls
+        ConfigSave["PUT /admin/config/agents<br/>Save to AdminConfigService"]:::orionCls
+        ConfigAgent["Orchestration Agent<br/>source: orchestration"]:::orionCls
+    end
+
+    subgraph governance [Governance Layer]
+        ChatAgents[(chatAgents DB<br/>Lifecycle metadata)]:::orionCls
+        Lifecycle["draft → pending → published → archived"]:::orionCls
+    end
+
+    Start --> TopLevel
+    TopLevel --> CreateCard
+    TopLevel --> BYOCard
+
+    CreateCard --> SkillsCard
+    CreateCard --> CanvasCard
+    CreateCard --> CodeCard
+    CreateCard --> TemplateCard
+
+    SkillsCard --> RuntimePick
+    RuntimePick --> SkillBrowse
+    SkillBrowse --> SkillConfig
+    SkillConfig --> SkillDeploy
+    SkillDeploy --> SkillAgent
+    SkillAgent --> ChatAgents
+
+    CanvasCard --> WFDashboard
+    WFDashboard --> WFEditor
+    WFEditor --> WFPublish
+    WFPublish --> WFAgent
+    WFAgent --> ChatAgents
+
+    CodeCard --> FrameworkPick
+    FrameworkPick --> DSLaunch
+    DSLaunch --> CloudIDE
+    CloudIDE -.->|"Later: deploy via BYO"| BYOCard
+
+    TemplateCard --> TemplateBrowser
+    TemplateBrowser --> Scaffolder
+    Scaffolder -.->|"Later: deploy via BYO"| BYOCard
+    TemplateBrowser -.->|"Open in DevSpace"| DSLaunch
+
+    AgentsPanel --> CreateModal
+    CreateModal --> AgentEditor
+    AgentEditor --> ConfigSave
+    ConfigSave --> ConfigAgent
+    ConfigAgent --> ChatAgents
+
+    ChatAgents --> Lifecycle

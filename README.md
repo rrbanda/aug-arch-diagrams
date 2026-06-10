@@ -70,6 +70,28 @@ Diagrams 09–15 cover the MCP (Model Context Protocol) tool management flows.
 | `docs/14-mcp-backend-api.md` | Complete REST API surface with auth requirements |
 | `docs/15-mcp-server-management.md` | MCP server config lifecycle: YAML, DB, merge, health, runtime |
 
+## Agent Creation Diagrams (Non-BYO)
+
+Diagrams 16–21 cover all non-BYO agent creation methods in the Augment plugin.
+
+| # | File | Type | Description |
+|---|------|------|-------------|
+| 16 | `16-agent-creation-overview.mermaid` | Flowchart | All 5 agent creation methods: Skills, Visual Canvas, DevSpaces, Templates, Config |
+| 17 | `17-skills-agent-creation.mermaid` | Sequence | Skills-based agent: runtime → skills → config → K8s deploy → health polling |
+| 18 | `18-workflow-builder-agent.mermaid` | Flowchart | Visual Canvas: node types, edge semantics, templates, publish flow, chat runtime |
+| 19 | `19-config-driven-agent.mermaid` | Sequence | Config-driven agent: admin panel templates, multi-tab editor, multi-agent topology |
+| 20 | `20-devspaces-template-agent.mermaid` | Flowchart | DevSpaces + Backstage templates: framework picker, scaffolder, cloud IDE |
+| 21 | `21-agent-types-comparison.mermaid` | Flowchart | Agent types side-by-side: storage, runtime, governance, chat routing |
+
+| Doc | Description |
+|-----|-------------|
+| `docs/16-agent-creation-overview.md` | All 5 methods with entry points and governance layer |
+| `docs/17-skills-agent-creation.md` | Skills wizard steps, K8s manifests, health polling |
+| `docs/18-workflow-builder-agent.md` | Node/edge types, built-in templates, publish and chat runtime |
+| `docs/19-config-driven-agent.md` | Config fields, multi-agent topology, handoff patterns |
+| `docs/20-devspaces-template-agent.md` | Framework picker, scaffolder, DevSpace integration |
+| `docs/21-agent-types-comparison.md` | Type matrix, lifecycle states, roles, chat routing |
+
 ## Naming
 
 - **Orion** = Developer Hub platform (Backstage-based)

@@ -1,0 +1,107 @@
+flowchart TD
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+
+    subgraph entry [Entry Points]
+        IntentDlg["AgentCreateIntentDialog<br/>Visual Canvas option"]:::userCls
+        AdminPanel["KagentiAgentsPanel<br/>Agent Builder button"]:::userCls
+        Marketplace["Marketplace<br/>Create Agent flow"]:::userCls
+    end
+
+    subgraph dashboard [WorkflowDashboard]
+        Templates["Template Gallery"]:::orionCls
+        ExistingWF["Existing Workflows<br/>Draft / Published"]:::orionCls
+        CreateNew["+ New Agent Workflow<br/>Blank or from template"]:::orionCls
+    end
+
+    subgraph templates [Built-in Workflow Templates]
+        T1["Simple Q&A Agent<br/>Start → Agent → End"]:::llmCls
+        T2["Smart Router<br/>Start → Classify → Specialists"]:::llmCls
+        T3["Research & Summarize<br/>Start → Researcher → Summarizer"]:::llmCls
+        T4["Kubernetes Assistant<br/>Start → Agent + MCP node"]:::llmCls
+        T5["Content Moderator<br/>Start → Agent + Transform + SetState"]:::llmCls
+    end
+
+    subgraph editor [WorkflowEditor Canvas]
+        direction TB
+        Canvas["EditorCanvas<br/>React Flow drag-and-drop"]:::orionCls
+        ConfigPanel["ConfigPanel<br/>Node properties editor"]:::orionCls
+        Toolbar["EditorToolbar<br/>Save / Preview / Publish / Export"]:::orionCls
+    end
+
+    subgraph nodeTypes [Available Node Types]
+        StartNode["Start<br/>Entry point + greeting"]:::rhaoCls
+        AgentNode["Agent<br/>Instructions + model + tools"]:::rhaoCls
+        ToolNode["Tool<br/>MCP or custom function"]:::buildCls
+        ClassifyNode["Classify<br/>Intent routing"]:::llmCls
+        LogicNode["Logic<br/>If/else branching"]:::llmCls
+        McpNode["MCP<br/>External MCP server"]:::buildCls
+        TransformNode["Transform<br/>Data transformation"]:::k8sCls
+        SetStateNode["SetState<br/>Workflow state mutation"]:::k8sCls
+        GuardrailNode["Guardrail<br/>Safety checks"]:::llmCls
+        EndNode["End<br/>Termination"]:::rhaoCls
+    end
+
+    subgraph edgeTypes [Edge Semantics]
+        HandoffEdge["Handoff<br/>Agent → Agent delegation"]:::orionCls
+        ToolBindEdge["Tool Binding<br/>Agent → Tool association"]:::orionCls
+        SequenceEdge["Sequence<br/>Step-by-step flow"]:::orionCls
+        ConditionalEdge["Conditional<br/>Branching logic"]:::orionCls
+        GuardrailBindEdge["Guardrail Binding<br/>Agent → Guardrail check"]:::orionCls
+    end
+
+    subgraph publish [Publish Flow]
+        PreviewChat["PreviewChatPanel<br/>Test workflow in-dialog"]:::orionCls
+        PublishDlg["PublishDialog<br/>Validate + changelog"]:::orionCls
+        Validation["Validation checks:<br/>Has Start + Agent nodes<br/>Agent has instructions<br/>Connected graph"]:::orionCls
+        SaveAPI["PUT /workflows/:id"]:::orionCls
+        PublishAPI["POST /workflows/:id/publish"]:::orionCls
+    end
+
+    subgraph result [Published Agent]
+        SyncAgents["syncWorkflowToChatAgents()<br/>Register in governance"]:::orionCls
+        WFEntry["Workflow-level entry<br/>agentId = workflowId"]:::rhaoCls
+        NodeEntries["Per-agent-node entries<br/>agentId = wf/workflowId/nodeId"]:::rhaoCls
+        CatalogAppear["Appears in Marketplace<br/>framework: workflow-builder"]:::rhaoCls
+    end
+
+    subgraph runtime [Chat Runtime]
+        ChatReq["User sends message<br/>model = workflow ID"]:::userCls
+        Hydrator["WorkflowHydrator<br/>Graph → OpenAI Agents SDK"]:::orionCls
+        Runner["SDK Runner<br/>Multi-agent orchestration"]:::orionCls
+        LlamaStack["Llama Stack<br/>/v1/responses"]:::llmCls
+    end
+
+    IntentDlg --> CreateNew
+    AdminPanel --> CreateNew
+    Marketplace --> CreateNew
+
+    CreateNew --> Templates
+    Templates --> T1 & T2 & T3 & T4 & T5
+    T1 & T2 & T3 & T4 & T5 --> Canvas
+    ExistingWF --> Canvas
+
+    Canvas --> ConfigPanel
+    Canvas --> Toolbar
+
+    Canvas --- StartNode & AgentNode & ToolNode & ClassifyNode & LogicNode & McpNode & TransformNode & SetStateNode & GuardrailNode & EndNode
+
+    Canvas --- HandoffEdge & ToolBindEdge & SequenceEdge & ConditionalEdge & GuardrailBindEdge
+
+    Toolbar --> PreviewChat
+    Toolbar --> PublishDlg
+    PublishDlg --> Validation
+    Validation -->|Pass| SaveAPI
+    SaveAPI --> PublishAPI
+    PublishAPI --> SyncAgents
+    SyncAgents --> WFEntry
+    SyncAgents --> NodeEntries
+    WFEntry --> CatalogAppear
+
+    ChatReq --> Hydrator
+    Hydrator --> Runner
+    Runner --> LlamaStack

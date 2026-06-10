@@ -1,0 +1,83 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant Dialog as AgentCreateIntentDialog
+    participant Runtime as RuntimePicker
+    participant Skills as SkillBrowser
+    participant Config as SkillAgentConfigForm
+    participant API as AugmentApi
+    participant BE as augment-backend<br/>skillsRoutes
+    participant Mkt as Skills Marketplace<br/>External API
+    participant K8s as Kubernetes Cluster
+    participant Pod as Skill Agent Pod<br/>DocsClaw Runtime
+    participant Gov as AdminConfigService<br/>chatAgents
+
+    rect rgb(224, 231, 255)
+        Note over User,Dialog: Step 1 - Select Runtime
+        User->>Dialog: Click "Create using Skills"
+        Dialog->>Runtime: Show RuntimePicker
+        Runtime->>API: GET /skills/runtimes
+        API->>BE: Proxy to config
+        BE-->>Runtime: runtimes[] (DocsClaw, ZeroClaw, etc.)
+        Note over Runtime: Each runtime shows:<br/>name, language, footprint, features
+        User->>Runtime: Select a runtime (e.g. DocsClaw)
+    end
+
+    rect rgb(209, 250, 229)
+        Note over User,Mkt: Step 2 - Choose Skills
+        Dialog->>Skills: Show SkillBrowser
+        Skills->>API: GET /skills
+        API->>BE: Proxy request
+        BE->>Mkt: Fetch skills catalog
+        Mkt-->>BE: skills[] with name, domain, description
+        BE-->>Skills: Grouped by domain
+        Note over Skills: Domain tabs + search<br/>Checkbox selection
+        User->>Skills: Select one or more skills
+        User->>Skills: Click Next
+    end
+
+    rect rgb(237, 233, 254)
+        Note over User,Config: Step 3 - Configure Agent
+        Dialog->>Config: Show SkillAgentConfigForm
+        Config->>Config: Auto-derive agent name from skills
+        Config->>Config: Auto-generate system prompt
+        Note over Config: "You are a specialized AI agent<br/>with expertise in: {skill names}.<br/>Use load_skill tool..."
+        User->>Config: Customize name, namespace, prompt
+        User->>Config: Click Deploy
+    end
+
+    rect rgb(207, 250, 254)
+        Note over Config,Pod: Deploy to Cluster
+        Config->>API: POST /agents/from-skills
+        Note over API: Body: { name, namespace,<br/>systemPrompt, runtime,<br/>skills: [{ slug, name, pluginName, gitPath }] }
+        API->>BE: Forward request
+
+        BE->>BE: Resolve runtime image from config
+        BE->>BE: Auto-derive namespace (user-agents)
+        BE->>BE: generateSkillAgentManifests()
+        Note over BE: Creates: Namespace, Secret,<br/>ConfigMap (skills), Service,<br/>Deployment (init + runtime containers)
+
+        BE->>K8s: kubectl apply manifests
+        K8s->>K8s: Create namespace + workloads
+        K8s->>Pod: Start DocsClaw pod
+
+        BE->>Gov: Register chatAgents entry
+        Note over Gov: lifecycleStage: draft<br/>framework: docsclaw<br/>chatEndpoint: http://svc:port
+
+        BE-->>API: { deployed, agentName, namespace, chatEndpoint, skillCount }
+        API-->>Dialog: Show deploying status
+    end
+
+    rect rgb(254, 243, 199)
+        Note over Dialog,Pod: Health Polling
+        loop Every 5 seconds (max 12 attempts)
+            Dialog->>API: GET /skills/agents/{name}/info
+            API->>BE: Proxy to chatEndpoint
+            BE->>Pod: Health check
+            Pod-->>BE: { health: { status } }
+            BE-->>Dialog: Health result
+        end
+        Note over Dialog: status === 'healthy' → Ready
+        Dialog->>User: "Agent Ready" success view
+        User->>Dialog: "Go to My Agents"
+    end

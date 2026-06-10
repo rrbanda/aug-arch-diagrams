@@ -1,0 +1,84 @@
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant Panel as AgentsPanel
+    participant Modal as CreateAgentModal
+    participant Editor as Multi-tab Agent Editor
+    participant API as AugmentApi
+    participant BE as augment-backend<br/>adminConfigRoutes
+    participant ACS as AdminConfigService<br/>agents + chatAgents
+    participant RCR as RuntimeConfigResolver
+    participant Graph as AgentGraphManager
+    participant Orch as OpenAIAgentsOrchestrator
+    participant LS as Llama Stack<br/>/v1/responses
+
+    rect rgb(224, 231, 255)
+        Note over Admin,Modal: Step 1 - Create New Agent
+        Admin->>Panel: Click "New Agent"
+        Panel->>Modal: Open CreateAgentModal
+        Modal->>Modal: Show template presets
+        Note over Modal: Templates:<br/>- Blank Agent<br/>- Code Assistant (code interpreter + web search)<br/>- Research Agent (RAG + web search)<br/>- Knowledge Expert (RAG only)
+        Admin->>Modal: Enter name, select template
+        Modal->>Modal: Auto-generate ID from name
+        Modal->>Panel: onCreate(name, id)
+        Panel->>Panel: Create agent with template defaults
+    end
+
+    rect rgb(209, 250, 229)
+        Note over Admin,Editor: Step 2 - Configure Agent
+        Panel->>Editor: Show multi-tab editor
+        Note over Editor: Instructions Tab:<br/>- System prompt (markdown)<br/>- AI-assisted prompt generation<br/>- Model selection
+
+        Note over Editor: Capabilities Tab:<br/>- MCP servers (multi-select)<br/>- Enable RAG + vector store IDs<br/>- Enable web search<br/>- Enable code interpreter<br/>- Handoff targets
+
+        Note over Editor: Connections Tab:<br/>- Handoffs: [agent-key-1, agent-key-2]<br/>- asTools: [agent-key-3]<br/>- Auto-derived role: router / specialist / standalone
+
+        Note over Editor: Advanced Tab:<br/>- Temperature, max tokens<br/>- Tool choice (auto/required/none)<br/>- Reasoning (enabled + summary)<br/>- Guardrails list<br/>- Max tool calls<br/>- Truncation strategy
+    end
+
+    rect rgb(237, 233, 254)
+        Note over Admin,ACS: Step 3 - Save Configuration
+        Admin->>Panel: Click Save
+        Panel->>Panel: validateAgents(allAgents)
+        Panel->>Panel: agentToConfig(formData) per agent
+        Note over Panel: Builds Record of AgentConfig:<br/>{ router: { name, instructions,<br/>handoffs: [specialist-1], ... },<br/>specialist-1: { name, instructions,<br/>mcpServers: [server-id], ... } }
+
+        Panel->>API: PUT /admin/config/agents
+        API->>BE: Save agents config
+        BE->>ACS: set('agents', agentConfigs)
+        ACS->>ACS: Upsert to augment_admin_config
+
+        BE->>BE: Auto-manage chatAgents entries
+        Note over BE: For each router/standalone agent:<br/>- Create chatAgents entry if missing<br/>- lifecycleStage: pending<br/>For specialists: hide from catalog
+
+        BE->>ACS: set('chatAgents', updatedConfigs)
+
+        Panel->>API: PUT /admin/config/defaultAgent
+        API->>BE: Save entry agent key
+        BE->>ACS: set('defaultAgent', 'router')
+
+        Panel->>API: PUT /admin/config/maxAgentTurns
+        API->>BE: Save turn limit
+        BE->>ACS: set('maxAgentTurns', 10)
+
+        BE-->>Panel: Success
+        Panel->>Admin: Show save confirmation
+    end
+
+    rect rgb(254, 243, 199)
+        Note over RCR,LS: Runtime - Chat Execution
+        Note over RCR: On chat request with<br/>model = agent key
+
+        RCR->>RCR: mergeMcpServers() + resolve agents
+        RCR->>Graph: AgentGraphManager.getSnapshot()
+        Graph->>Graph: resolveAgentGraph(agents, defaultAgent)
+        Note over Graph: Builds handoff + delegation<br/>function tools per agent
+
+        Graph->>Orch: OpenAIAgentsOrchestrator
+        Note over Orch: Converts AgentConfig →<br/>OpenAI Agents SDK Agent instances<br/>with handoffs[] and tools[]
+
+        Orch->>LS: Runner.run(entryAgent, messages)
+        Note over LS: Multi-turn execution:<br/>Agent calls tools → handoffs →<br/>specialist agents → tools → ...
+        LS-->>Orch: Streaming response
+        Orch-->>Admin: SSE events to chat UI
+    end

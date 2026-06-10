@@ -1,0 +1,88 @@
+flowchart TD
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+
+    Start([User clicks New Agent<br/>→ Create Agent<br/>→ Code Your Agent<br/>or Create from Template]):::userCls
+
+    subgraph codePath [Method 3: Code Your Agent - DevSpaces]
+        FWPicker["DevSpacesFrameworkPicker<br/>Choose a framework"]:::buildCls
+
+        subgraph frameworks [Available Frameworks]
+            ADK["Google ADK<br/>Python, agent orchestration"]:::buildCls
+            LangGraph["LangGraph<br/>Python, LangChain graphs"]:::buildCls
+            CrewAI["CrewAI<br/>Python, multi-agent teams"]:::buildCls
+            OpenAI["OpenAI Agents<br/>Python, Responses API"]:::buildCls
+            Custom["DIY / Custom<br/>Bring your own repo"]:::buildCls
+        end
+
+        DSForm["DevSpacesLaunchForm"]:::buildCls
+        HealthCheck["checkDevSpacesHealth()"]:::buildCls
+        GitInput["Git Repository URL<br/>Pre-filled from framework starterRepo"]:::buildCls
+        ResourceConfig["Optional: CPU / Memory limits"]:::buildCls
+        CreateWS["createDevSpacesWorkspace()<br/>POST /kagenti/devspaces"]:::buildCls
+
+        subgraph polling [Workspace Polling]
+            PollStatus["Poll workspace status<br/>Every 3 seconds"]:::buildCls
+            Starting["phase: Starting"]:::llmCls
+            Running["phase: Running"]:::rhaoCls
+            Failed["phase: Failed"]:::userCls
+        end
+
+        OpenIDE["Open Cloud IDE<br/>Full tooling + runtime"]:::rhaoCls
+        Develop["User develops agent code<br/>Build + test locally"]:::rhaoCls
+    end
+
+    subgraph templatePath [Method 4: Create from Template]
+        TemplateBrowser["AgentTemplateBrowser<br/>specType = agent"]:::llmCls
+        CatalogQuery["Backstage Catalog Query<br/>kind: Template<br/>spec.type: agent"]:::llmCls
+
+        subgraph agentTemplates [Example Agent Templates]
+            ADKT["Google ADK Agent<br/>agent-template.yaml"]:::llmCls
+            LGT["LangGraph Agent<br/>langgraph-agent-template.yaml"]:::llmCls
+            CRT["CrewAI Agent<br/>crewai-agent-template.yaml"]:::llmCls
+        end
+
+        UseTemplate["Use Template<br/>Opens Backstage Scaffolder<br/>in new tab"]:::llmCls
+        ScaffolderRun["Scaffolder Executes<br/>Fetch + publish:github"]:::llmCls
+        NewRepo["New Git Repository<br/>Agent project scaffold"]:::rhaoCls
+        OpenDS["Open in DevSpace<br/>Template source repo"]:::buildCls
+    end
+
+    subgraph nextStep [Next Step: Deploy]
+        BuildImage["User builds container image<br/>Push to registry"]:::k8sCls
+        BYODeploy["BYO Agent Deploy<br/>Image or Source via<br/>CreateAgentWizard"]:::k8sCls
+        AgentRunning["Agent Running on K8s<br/>Registered in governance"]:::rhaoCls
+    end
+
+    Start --> FWPicker
+    Start --> TemplateBrowser
+
+    FWPicker --> ADK & LangGraph & CrewAI & OpenAI & Custom
+    ADK & LangGraph & CrewAI & OpenAI & Custom --> DSForm
+    DSForm --> HealthCheck
+    HealthCheck --> GitInput
+    GitInput --> ResourceConfig
+    ResourceConfig --> CreateWS
+    CreateWS --> PollStatus
+    PollStatus --> Starting
+    Starting --> Running
+    Starting --> Failed
+    Running --> OpenIDE
+    OpenIDE --> Develop
+
+    TemplateBrowser --> CatalogQuery
+    CatalogQuery --> ADKT & LGT & CRT
+    ADKT & LGT & CRT --> UseTemplate
+    UseTemplate --> ScaffolderRun
+    ScaffolderRun --> NewRepo
+    ADKT & LGT & CRT --> OpenDS
+    OpenDS --> DSForm
+
+    Develop -->|"Build + push image"| BuildImage
+    NewRepo -->|"Build + push image"| BuildImage
+    BuildImage --> BYODeploy
+    BYODeploy --> AgentRunning

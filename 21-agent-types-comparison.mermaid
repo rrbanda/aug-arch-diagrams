@@ -1,0 +1,82 @@
+flowchart TB
+    classDef userCls fill:#e0e7ff,stroke:#4f46e5,color:#000
+    classDef orionCls fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef rhaoCls fill:#d1fae5,stroke:#059669,color:#000
+    classDef k8sCls fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef llmCls fill:#fef3c7,stroke:#d97706,color:#000
+    classDef buildCls fill:#cffafe,stroke:#0891b2,color:#000
+
+    subgraph overview [Agent Type Comparison]
+        direction TB
+
+        subgraph skillsType ["Skills Agent (docsclaw)"]
+            S_Create["Created via:<br/>Skills wizard in intent dialog"]:::rhaoCls
+            S_Storage["Stored in:<br/>K8s Deployment + chatAgents DB"]:::rhaoCls
+            S_Runtime["Runs on:<br/>K8s Pod (DocsClaw/ZeroClaw image)"]:::k8sCls
+            S_Chat["Chat via:<br/>Direct HTTP to chatEndpoint<br/>Skill chat proxy"]:::rhaoCls
+            S_Deploy["Deploys to cluster:<br/>Yes (platform-managed)"]:::rhaoCls
+        end
+
+        subgraph workflowType ["Workflow Agent (workflow-builder)"]
+            W_Create["Created via:<br/>Visual Canvas (WorkflowBuilder)"]:::orionCls
+            W_Storage["Stored in:<br/>workflows + workflowVersions DB"]:::orionCls
+            W_Runtime["Runs on:<br/>Responses API in-process<br/>WorkflowHydrator → SDK Runner"]:::orionCls
+            W_Chat["Chat via:<br/>Llama Stack /v1/responses<br/>Multi-agent orchestration"]:::orionCls
+            W_Deploy["Deploys to cluster:<br/>No (in-process execution)"]:::orionCls
+        end
+
+        subgraph configType ["Config Agent (orchestration)"]
+            C_Create["Created via:<br/>AgentsPanel admin UI or YAML"]:::llmCls
+            C_Storage["Stored in:<br/>agents + defaultAgent DB keys<br/>or augment.agents YAML"]:::llmCls
+            C_Runtime["Runs on:<br/>Responses API in-process<br/>Auto-migrated to workflow graph"]:::llmCls
+            C_Chat["Chat via:<br/>Llama Stack /v1/responses<br/>OpenAI Agents SDK"]:::llmCls
+            C_Deploy["Deploys to cluster:<br/>No (config-only)"]:::llmCls
+        end
+
+        subgraph byoType ["BYO Agent (kagenti) - reference only"]
+            B_Create["Created via:<br/>CreateAgentWizard<br/>Image or Git source deploy"]:::buildCls
+            B_Storage["Stored in:<br/>K8s CRD via Kagenti Operator"]:::buildCls
+            B_Runtime["Runs on:<br/>K8s Pod (user container)"]:::k8sCls
+            B_Chat["Chat via:<br/>Kagenti A2A protocol to pod"]:::buildCls
+            B_Deploy["Deploys to cluster:<br/>Yes (user-managed image)"]:::buildCls
+        end
+    end
+
+    subgraph unified [Unified Agent Catalog]
+        direction LR
+        ListAPI["GET /agents<br/>Merges all sources"]:::orionCls
+        subgraph sources [Agent Sources]
+            KagentiSrc["source: kagenti<br/>BYO K8s agents"]:::buildCls
+            OrchSrc["source: orchestration<br/>Config + Workflow agents"]:::orionCls
+            SkillsSrc["source: skills<br/>DocsClaw skill agents"]:::rhaoCls
+        end
+        GovernanceLyr["chatAgents governance<br/>lifecycle + visibility + display"]:::orionCls
+    end
+
+    subgraph lifecycle [Lifecycle State Machine]
+        Draft["Draft<br/>Just created"]:::llmCls
+        Pending["Pending<br/>Submitted for review"]:::llmCls
+        Published["Published<br/>Visible in marketplace"]:::rhaoCls
+        Archived["Archived<br/>Retired"]:::userCls
+
+        Draft -->|"Submit for Review"| Pending
+        Pending -->|"Approve"| Published
+        Pending -->|"Reject / Withdraw"| Draft
+        Published -->|"Request Unpublish"| Pending
+        Published -->|"Archive"| Archived
+        Archived -->|"Reactivate"| Draft
+    end
+
+    subgraph roles [Agent Roles - Auto-Derived]
+        Router["Router<br/>Has outgoing handoffs/asTools<br/>Entry point for multi-agent"]:::orionCls
+        Specialist["Specialist<br/>Target of another agent<br/>Hidden from catalog"]:::k8sCls
+        Standalone["Standalone<br/>No connections<br/>Independent agent"]:::rhaoCls
+    end
+
+    S_Create --> ListAPI
+    W_Create --> ListAPI
+    C_Create --> ListAPI
+    B_Create --> ListAPI
+    ListAPI --> KagentiSrc & OrchSrc & SkillsSrc
+    KagentiSrc & OrchSrc & SkillsSrc --> GovernanceLyr
+    GovernanceLyr --> Draft
