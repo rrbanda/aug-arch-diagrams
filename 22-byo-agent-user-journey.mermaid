@@ -1,0 +1,76 @@
+---
+title: BYO Agent User Journey
+---
+flowchart LR
+    User(["Platform Engineer"])
+
+    subgraph Step1 ["Select"]
+        NewAgent["New Agent Dialog"]
+        BYO["BYO Agent\nImport existing agent"]
+        NewAgent --> BYO
+    end
+
+    subgraph Step2 ["Configure"]
+        Basics["Agent Identity\nName, Namespace, Framework"]
+        Source["Deployment Source\nContainer Image or Git Repo"]
+        Runtime["Runtime Settings\nPorts, Env Vars, Auth"]
+        Basics --> Source --> Runtime
+    end
+
+    subgraph Step3 ["Governance Pipeline"]
+        Draft["Draft"]
+        Review["Pending Review"]
+        Published["Published\nVisible to Users"]
+        Draft -->|"submit"| Review
+        Review -->|"approve"| Published
+        Review -->|"reject"| Draft
+    end
+
+    subgraph Step4 ["RHOAI Operator"]
+        subgraph AgentOp ["Red Hat Agent Operator"]
+            KagentiAPI["Agent Management API\nDeploy, Monitor, Chat Proxy"]
+            Build["Build Service\nSource-to-Image"]
+            Identity["Identity and Security\nKeycloak, SPIRE, mTLS"]
+            MCP["MCP Gateway\nTool Routing"]
+        end
+    end
+
+    subgraph Step5 ["ARC (Citi)"]
+        Cluster["OpenShift Cluster\nManaged Infrastructure"]
+        AgentPod["Running BYO Agent\nA2A Protocol Endpoint"]
+        Cluster --> AgentPod
+    end
+
+    subgraph Step6 ["End Users"]
+        Marketplace["Agent Marketplace\nBrowse Published Agents"]
+        Chat["Chat with Agent\nStreaming via A2A"]
+    end
+
+    User --> NewAgent
+    BYO --> Basics
+    Runtime --> Draft
+    Published --> KagentiAPI
+    KagentiAPI --> Build
+    KagentiAPI --> Identity
+    KagentiAPI --> MCP
+    KagentiAPI -->|"deploys onto"| Cluster
+    Published -->|"listed in"| Marketplace
+    Marketplace -->|"select agent"| Chat
+    Chat -->|"routed through"| KagentiAPI
+    KagentiAPI --> AgentPod
+
+    classDef user fill:#1e3a5f,stroke:#4a90d9,color:#e0e0e0
+    classDef select fill:#2d2d4a,stroke:#818cf8,color:#e0e0e0
+    classDef config fill:#2d1f3d,stroke:#a78bfa,color:#e0e0e0
+    classDef gov fill:#3d1f2d,stroke:#ec4899,color:#e0e0e0
+    classDef rhoai fill:#0f2d4a,stroke:#0ea5e9,color:#e0e0e0
+    classDef arc fill:#4a1a1a,stroke:#f87171,color:#e0e0e0
+    classDef enduser fill:#1a3a2a,stroke:#10b981,color:#e0e0e0
+
+    class User user
+    class NewAgent,BYO select
+    class Basics,Source,Runtime config
+    class Draft,Review,Published gov
+    class KagentiAPI,Build,Identity,MCP rhoai
+    class Cluster,AgentPod arc
+    class Chat,Marketplace enduser

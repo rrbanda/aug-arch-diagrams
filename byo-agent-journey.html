@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BYO Agent User Journey</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0e0e10;
+    color: #e4e4e7;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .container {
+    max-width: 780px;
+    width: 100%;
+    padding: 40px 32px;
+  }
+
+  .header { margin-bottom: 32px; }
+  .header h1 { font-size: 26px; font-weight: 700; color: #fafafa; }
+  .header p { font-size: 13px; color: #71717a; margin-top: 6px; }
+
+  /* ---- Flow bar ---- */
+  .flow-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .flow-node {
+    padding: 5px 14px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid #27272a;
+    transition: all 0.4s ease;
+    white-space: nowrap;
+  }
+  .flow-node.active { opacity: 1; }
+  .flow-node.past { opacity: 0.65; }
+  .flow-node.future { opacity: 0.3; }
+  .flow-arrow {
+    width: 36px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  .flow-arrow line, .flow-arrow polyline {
+    transition: stroke 0.4s ease;
+  }
+
+  /* ---- Stage card ---- */
+  .stage-card {
+    border: 1px solid #27272a;
+    border-radius: 12px;
+    padding: 32px;
+    background: #18181b;
+    min-height: 370px;
+    transition: border-color 0.4s ease;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stage-content {
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+  .stage-content.hidden {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  .stage-content.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .stage-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    border: 2px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .stage-title { font-size: 22px; font-weight: 700; }
+  .stage-desc {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #a1a1aa;
+    margin-bottom: 24px;
+  }
+  .detail-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    background: #1f1f23;
+    border-left: 3px solid;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #e4e4e7;
+    transition: opacity 0.35s ease, transform 0.35s ease;
+  }
+  .detail-item.hidden {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  .detail-item.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  /* ---- Controls ---- */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .dots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .dot {
+    height: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.4s ease;
+    background: #27272a;
+  }
+  .dot.active { width: 24px; }
+  .dot:not(.active) { width: 8px; }
+  .buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .btn {
+    padding: 6px 18px;
+    border-radius: 6px;
+    border: 1px solid #3f3f46;
+    background: transparent;
+    color: #a1a1aa;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .btn:hover { border-color: #52525b; color: #e4e4e7; }
+  .btn.primary {
+    background: #27272a;
+    border-color: #3f3f46;
+    color: #fafafa;
+  }
+  .btn.primary:hover { background: #3f3f46; }
+
+  /* ---- Timeline ---- */
+  .timeline {
+    display: flex;
+    align-items: flex-start;
+    margin-top: 28px;
+  }
+  .timeline-step {
+    flex: 1;
+    display: flex;
+    align-items: center;
+  }
+  .timeline-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 1;
+  }
+  .timeline-dot {
+    border-radius: 50%;
+    transition: all 0.4s ease;
+  }
+  .timeline-label {
+    font-size: 11px;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+  }
+  .timeline-line {
+    flex: 1;
+    height: 2px;
+    margin-left: -4px;
+    margin-right: -4px;
+    margin-bottom: 20px;
+    transition: background 0.4s ease;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>BYO Agent User Journey</h1>
+    <p>How a platform engineer imports and deploys an external agent end-to-end</p>
+  </div>
+
+  <div class="flow-bar" id="flowBar"></div>
+
+  <div class="stage-card" id="stageCard">
+    <div class="stage-content hidden" id="stageContent"></div>
+  </div>
+
+  <div class="controls">
+    <div class="dots" id="dots"></div>
+    <div class="buttons">
+      <button class="btn" onclick="goPrev()">Previous</button>
+      <button class="btn primary" id="playBtn" onclick="togglePlay()">Pause</button>
+      <button class="btn" onclick="goNext()">Next</button>
+    </div>
+  </div>
+
+  <div class="timeline" id="timeline"></div>
+</div>
+
+<script>
+const STAGES = [
+  {
+    id: "select", label: "Select", title: "Choose BYO Agent",
+    desc: "Platform engineer opens the New Agent dialog and selects 'BYO Agent' to import an existing agent from a container image or Git repository.",
+    details: ["New Agent Dialog", "BYO Agent Card", "Import existing agent"],
+  },
+  {
+    id: "configure", label: "Configure", title: "Configure Agent",
+    desc: "The wizard collects agent identity, deployment source, and runtime settings across three steps.",
+    details: ["Name, Namespace, Framework", "Container Image or Git Repo", "Ports, Env Vars, Auth Bridge"],
+  },
+  {
+    id: "govern", label: "Govern", title: "Governance Pipeline",
+    desc: "The agent enters the lifecycle pipeline. It starts as a draft, is submitted for review, and must be approved before users can access it.",
+    details: ["Draft (auto-registered)", "Pending Review (admin)", "Published (visible to users)"],
+  },
+  {
+    id: "deploy", label: "Deploy", title: "RHOAI / Red Hat Agent Operator",
+    desc: "The Red Hat Agent Operator inside RHOAI handles the actual deployment: building from source, creating K8s resources, and securing with identity.",
+    details: ["Agent Management API", "Build Service (Source-to-Image)", "Identity (Keycloak, SPIRE, mTLS)", "MCP Gateway (Tool Routing)"],
+  },
+  {
+    id: "arc", label: "ARC (Citi)", title: "Running on ARC",
+    desc: "The BYO agent runs as a pod on the ARC-managed OpenShift cluster. All chat traffic is routed through the Agent Operator, never direct to the pod.",
+    details: ["OpenShift Cluster", "BYO Agent Pod (A2A)", "Managed by ARC infrastructure"],
+  },
+  {
+    id: "use", label: "End Users", title: "Chat with Agent",
+    desc: "Published agents appear in the marketplace. End users select an agent and chat via streaming A2A protocol, with responses routed through the Agent Operator.",
+    details: ["Agent Marketplace", "Select published agent", "Streaming chat via A2A"],
+  },
+];
+
+const COLORS = [
+  { bg: "#1e3a5f", border: "#4a90d9", accent: "#6ab0ff" },
+  { bg: "#2d1f3d", border: "#a78bfa", accent: "#c4b5fd" },
+  { bg: "#3d1f2d", border: "#ec4899", accent: "#f9a8d4" },
+  { bg: "#0f2d4a", border: "#0ea5e9", accent: "#67e8f9" },
+  { bg: "#4a1a1a", border: "#f87171", accent: "#fca5a5" },
+  { bg: "#1a3a2a", border: "#10b981", accent: "#6ee7b7" },
+];
+
+let active = 0;
+let playing = true;
+let timer = null;
+
+function buildFlowBar() {
+  const bar = document.getElementById("flowBar");
+  bar.innerHTML = "";
+  STAGES.forEach((s, i) => {
+    const node = document.createElement("div");
+    node.className = "flow-node " + (i === active ? "active" : i < active ? "past" : "future");
+    node.textContent = s.label;
+    const c = COLORS[i];
+    if (i === active) {
+      node.style.background = c.bg;
+      node.style.borderColor = c.border;
+      node.style.color = c.accent;
+    } else if (i < active) {
+      node.style.borderColor = c.border;
+      node.style.color = "#71717a";
+    } else {
+      node.style.color = "#52525b";
+    }
+    node.onclick = () => { playing = false; updatePlayBtn(); goTo(i); };
+    bar.appendChild(node);
+
+    if (i < STAGES.length - 1) {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "flow-arrow");
+      svg.setAttribute("viewBox", "0 0 36 16");
+      const lineColor = i < active ? COLORS[i + 1].border : "#27272a";
+      svg.innerHTML = `<line x1="2" y1="8" x2="28" y2="8" stroke="${lineColor}" stroke-width="1.5" stroke-linecap="round"/>` +
+        `<polyline points="23,3 30,8 23,13" stroke="${lineColor}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+      bar.appendChild(svg);
+    }
+  });
+}
+
+function buildStage() {
+  const s = STAGES[active];
+  const c = COLORS[active];
+  const card = document.getElementById("stageCard");
+  const content = document.getElementById("stageContent");
+
+  card.style.borderColor = c.border;
+  content.className = "stage-content hidden";
+
+  setTimeout(() => {
+    let html = `<div class="stage-header">`;
+    html += `<div class="stage-number" style="border-color:${c.border};color:${c.accent}">${active + 1}</div>`;
+    html += `<div class="stage-title" style="color:${c.accent}">${s.title}</div>`;
+    html += `</div>`;
+    html += `<div class="stage-desc">${s.desc}</div>`;
+    s.details.forEach((d, i) => {
+      html += `<div class="detail-item hidden" style="border-left-color:${c.border};transition-delay:${0.15 + i * 0.08}s" data-detail>${d}</div>`;
+    });
+    content.innerHTML = html;
+    content.className = "stage-content visible";
+
+    setTimeout(() => {
+      content.querySelectorAll("[data-detail]").forEach(el => {
+        el.className = "detail-item visible";
+      });
+    }, 80);
+  }, 300);
+}
+
+function buildDots() {
+  const dots = document.getElementById("dots");
+  dots.innerHTML = "";
+  STAGES.forEach((_, i) => {
+    const dot = document.createElement("div");
+    dot.className = "dot" + (i === active ? " active" : "");
+    if (i === active) dot.style.background = COLORS[active].accent;
+    dot.onclick = () => { playing = false; updatePlayBtn(); goTo(i); };
+    dots.appendChild(dot);
+  });
+}
+
+function buildTimeline() {
+  const tl = document.getElementById("timeline");
+  tl.innerHTML = "";
+  STAGES.forEach((s, i) => {
+    const c = COLORS[i];
+    const isActive = i === active;
+    const isPast = i < active;
+
+    const step = document.createElement("div");
+    step.className = "timeline-step";
+
+    const node = document.createElement("div");
+    node.className = "timeline-node";
+
+    const dot = document.createElement("div");
+    dot.className = "timeline-dot";
+    dot.style.width = isActive ? "14px" : "10px";
+    dot.style.height = isActive ? "14px" : "10px";
+    dot.style.background = isPast || isActive ? c.accent : "#27272a";
+    if (isActive) dot.style.border = `2px solid ${c.border}`;
+
+    const label = document.createElement("div");
+    label.className = "timeline-label";
+    label.textContent = s.label;
+    label.style.fontWeight = isActive ? "600" : "400";
+    label.style.color = isActive ? c.accent : isPast ? "#a1a1aa" : "#3f3f46";
+
+    node.appendChild(dot);
+    node.appendChild(label);
+    step.appendChild(node);
+
+    if (i < STAGES.length - 1) {
+      const line = document.createElement("div");
+      line.className = "timeline-line";
+      line.style.background = isPast ? COLORS[i + 1].border : "#27272a";
+      step.appendChild(line);
+    }
+    tl.appendChild(step);
+  });
+}
+
+function render() {
+  buildFlowBar();
+  buildStage();
+  buildDots();
+  buildTimeline();
+}
+
+function goTo(idx) {
+  active = idx;
+  render();
+  resetTimer();
+}
+
+function goNext() { playing = false; updatePlayBtn(); goTo((active + 1) % STAGES.length); }
+function goPrev() { playing = false; updatePlayBtn(); goTo((active - 1 + STAGES.length) % STAGES.length); }
+
+function togglePlay() {
+  playing = !playing;
+  updatePlayBtn();
+  if (playing) resetTimer();
+  else clearInterval(timer);
+}
+
+function updatePlayBtn() {
+  document.getElementById("playBtn").textContent = playing ? "Pause" : "Play";
+}
+
+function resetTimer() {
+  clearInterval(timer);
+  if (playing) {
+    timer = setInterval(() => {
+      active = (active + 1) % STAGES.length;
+      render();
+    }, 4000);
+  }
+}
+
+// Keyboard navigation
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); goNext(); playing = false; updatePlayBtn(); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); goPrev(); playing = false; updatePlayBtn(); }
+  if (e.key === "p") togglePlay();
+});
+
+render();
+resetTimer();
+</script>
+</body>
+</html>
